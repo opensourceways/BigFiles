@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"github.com/metalogical/BigFiles/batch"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/minio/minio-go/v7/pkg/s3utils"
 )
 
 var S3PutLimit int = 5*int(math.Pow10(9)) - 1 // 5GB - 1
@@ -46,22 +44,18 @@ func (o Options) imputeFromEnv() (Options, error) {
 		if region == "" {
 			return o, errors.New("endpoint required")
 		}
-		o.Endpoint = fmt.Sprintf("s3.%s.amazonaws.com", region)
+		o.Endpoint = region
 	}
 	if o.AccessKeyID == "" {
-		if s3utils.IsAmazonEndpoint(url.URL{Host: o.Endpoint}) {
-			o.AccessKeyID = os.Getenv("AWS_ACCESS_KEY_ID")
-			if o.AccessKeyID == "" {
-				return o, fmt.Errorf("AWS access key ID required for %s", o.Endpoint)
-			}
-			o.SecretAccessKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
-			if o.SecretAccessKey == "" {
-				return o, fmt.Errorf("AWS secret access key required for %s", o.Endpoint)
-			}
-			o.SessionToken = os.Getenv("AWS_SESSION_TOKEN")
-		} else {
-			return o, fmt.Errorf("access key & id required for %s", o.Endpoint)
+		o.AccessKeyID = os.Getenv("AWS_ACCESS_KEY_ID")
+		if o.AccessKeyID == "" {
+			return o, fmt.Errorf("AWS access key ID required for %s", o.Endpoint)
 		}
+		o.SecretAccessKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
+		if o.SecretAccessKey == "" {
+			return o, fmt.Errorf("AWS secret access key required for %s", o.Endpoint)
+		}
+		o.SessionToken = os.Getenv("AWS_SESSION_TOKEN")
 	}
 	if o.Bucket == "" {
 		return o, fmt.Errorf("bucket required")
@@ -100,7 +94,7 @@ func New(o Options) (http.Handler, error) {
 	}
 
 	r := chi.NewRouter()
-	r.Post("/objects/batch", s.handleBatch)
+	r.Post("/{owner}/{repo}/objects/batch", s.handleBatch)
 
 	return r, nil
 }
@@ -127,7 +121,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 		if username, password, ok := r.BasicAuth(); ok {
 			err = s.isAuthorized(username, password)
 			if err != nil {
-				err = fmt.Errorf("Unauthorized: %w", err)
+				err = fmt.Errorf("unauthorized: %w", err)
 			}
 		} else {
 			err = errors.New("Unauthorized")

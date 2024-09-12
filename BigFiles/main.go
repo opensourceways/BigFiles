@@ -12,11 +12,6 @@ import (
 )
 
 func main() {
-	user := os.Getenv("LFS_USER")
-	pass := os.Getenv("LFS_PASS")
-	if user == "" || pass == "" {
-		log.Fatalln("LFS_USER and LFS_PASS must be set")
-	}
 	bucket := os.Getenv("LFS_BUCKET")
 	if bucket == "" {
 		log.Fatalln("LFS_BUCKET must be set")
@@ -25,7 +20,7 @@ func main() {
 	s, err := server.New(server.Options{
 		S3Accelerate: true,
 		Bucket:       bucket,
-		IsAuthorized: auth.Static(user, pass),
+		IsAuthorized: auth.GiteeAuth(),
 	})
 	if err != nil {
 		log.Fatalln(err)

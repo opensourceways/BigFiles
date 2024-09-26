@@ -1,7 +1,7 @@
 FROM golang:1.21 as BUILDER
 
 WORKDIR /home
-RUN git clone https://github.com/opensourceways/BigFiles.git
+COPY . .
 RUN cd ./BigFiles && \
     go get github.com/akrylysov/algnhsa && \
     go build ./BigFiles/main.go

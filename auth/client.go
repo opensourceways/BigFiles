@@ -31,7 +31,7 @@ func getParsedResponse(method, path string, header http.Header, body io.Reader, 
 		} else if response.StatusCode == http.StatusUnauthorized {
 			return errors.New("unauthorized")
 		}
-		return errors.New("error occured accessing gitee")
+		return errors.New("error occurred accessing gitee")
 	}
 	data, err := io.ReadAll(response.Body)
 	if err != nil {

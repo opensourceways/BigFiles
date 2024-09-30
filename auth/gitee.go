@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	allowedRepos        = []string{"wj00037", "openeuler", "src-openeuler"}
+	allowedRepos        = []string{"openeuler", "src-openeuler"}
 	uploadPermissions   = []string{"admin", "developer"}
 	downloadPermissions = []string{"admin", "developer", "read"}
 )

@@ -132,8 +132,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	userInRepo.Operation = req.Operation
 	userInRepo.Owner = chi.URLParam(r, "owner")
 	userInRepo.Repo = chi.URLParam(r, "repo")
-	if s.isAuthorized != nil {
-		var err error
+	if err = auth.CheckRepoOwner(userInRepo); req.Operation == "upload" || err != nil {
 		if username, password, ok := r.BasicAuth(); ok {
 			userInRepo.Username = username
 			userInRepo.Password = password
@@ -144,7 +143,6 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 		} else {
 			err = errors.New("Unauthorized")
 		}
-
 		if err != nil {
 			w.Header().Set("LFS-Authenticate", `Basic realm="Git LFS"`)
 			w.WriteHeader(401)

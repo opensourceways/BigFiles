@@ -1,18 +1,19 @@
 package auth
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 )
 
-var uploadPermissions = []string{"admin", "developer"}
-var downloadPermissions = []string{"admin", "developer", "read"}
+var (
+	allowedRepos        = []string{"wj00037", "openeuler", "src-openeuler"}
+	uploadPermissions   = []string{"admin", "developer"}
+	downloadPermissions = []string{"admin", "developer", "read"}
+)
 
 type giteeUser struct {
 	Login      string `json:"login"`
@@ -28,21 +29,69 @@ type UserInRepo struct {
 	Operation string
 }
 
+type parent struct {
+	Fullname string `json:"full_name"`
+}
+
+type Repo struct {
+	Parent   parent `json:"parent"`
+	Fullname string `json:"full_name"`
+}
+
 type AccessToken struct {
 	Token string `json:"access_token"`
 }
 
 func GiteeAuth() func(UserInRepo) error {
 	return func(userInRepo UserInRepo) error {
-		token, err := getToken(userInRepo.Username, userInRepo.Password)
-		if err != nil {
-			userInRepo.Token = userInRepo.Password
-		} else {
-			userInRepo.Token = token
+		if userInRepo.Password != "" {
+			token, err := getToken(userInRepo.Username, userInRepo.Password)
+			if err != nil {
+				userInRepo.Token = userInRepo.Password
+			} else {
+				userInRepo.Token = token
+			}
+		}
+
+		if err := CheckRepoOwner(userInRepo); err != nil {
+			return err
 		}
 
 		return verifyUser(userInRepo)
 	}
+}
+
+// CheckRepoOwner checks whether the owner of a repo is allowed to use lfs server
+func CheckRepoOwner(userInRepo UserInRepo) error {
+	path := fmt.Sprintf(
+		"https://gitee.com/api/v5/repos/%s/%s",
+		userInRepo.Owner,
+		userInRepo.Repo,
+	)
+	if userInRepo.Token != "" {
+		path += fmt.Sprintf("?access_token=%s", userInRepo.Token)
+	}
+	headers := http.Header{"Content-Type": []string{"application/json;charset=UTF-8"}}
+	repo := new(Repo)
+	err := getParsedResponse("GET", path, headers, nil, &repo)
+	if err != nil {
+		return err
+	}
+	for _, allowedRepo := range allowedRepos {
+		if strings.Split(repo.Fullname, "/")[0] == allowedRepo {
+			return nil
+		}
+	}
+
+	if repo.Parent.Fullname != "" {
+		for _, allowedRepo := range allowedRepos {
+			if strings.Split(repo.Parent.Fullname, "/")[0] == allowedRepo {
+				return nil
+			}
+		}
+	}
+
+	return errors.New("your repository does not appear to have permission to use this lfs service")
 }
 
 // getToken gets access_token by username and password
@@ -58,58 +107,32 @@ func getToken(username, password string) (string, error) {
 	form.Add("client_secret", clientSecret)
 
 	path := "https://gitee.com/oauth/token"
-	response, err := http.Post(path, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
+	headers := http.Header{"Content-Type": []string{"application/x-www-form-urlencoded"}}
+	accessToken := new(AccessToken)
+	err := getParsedResponse("POST", path, headers, strings.NewReader(form.Encode()), &accessToken)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
-	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusOK {
-		return "", errors.New("invalid credentials")
-	}
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		panic(err)
-	}
-	var accessToken AccessToken
-	err = json.Unmarshal(body, &accessToken)
-	if err != nil {
-		panic(err)
-	}
 	return accessToken.Token, nil
 }
 
-// verifyUser verifies user permission in repo by access_token
+// verifyUser verifies user permission in repo by access_token and operation
 func verifyUser(userInRepo UserInRepo) error {
 	path := fmt.Sprintf(
-		"https://gitee.com/api/v5/repos/%s/%s/collaborators/%s/permission?access_token=%s",
+		"https://gitee.com/api/v5/repos/%s/%s/collaborators/%s/permission",
 		userInRepo.Owner,
 		userInRepo.Repo,
 		userInRepo.Username,
-		userInRepo.Token,
 	)
-	req, err := http.NewRequest("GET", path, nil)
-	if err != nil {
-		panic(err)
+	if userInRepo.Token != "" {
+		path += fmt.Sprintf("?access_token=%s", userInRepo.Token)
 	}
-	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
-
-	response, err := http.DefaultClient.Do(req)
+	headers := http.Header{"Content-Type": []string{"application/json;charset=UTF-8"}}
+	giteeUser := new(giteeUser)
+	err := getParsedResponse("GET", path, headers, nil, &giteeUser)
 	if err != nil {
-		panic(err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return errors.New("invalid credentials")
-	}
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		panic(err)
-	}
-	var giteeUser giteeUser
-	err = json.Unmarshal(body, &giteeUser)
-	if err != nil {
-		panic(err)
+		return err
 	}
 
 	if giteeUser.Login != userInRepo.Username {

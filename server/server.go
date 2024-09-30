@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi"
+	"github.com/metalogical/BigFiles/auth"
 	"github.com/metalogical/BigFiles/batch"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -35,7 +36,7 @@ type Options struct {
 	TTL    time.Duration // defaults to 1 hour
 	Prefix string
 
-	IsAuthorized func(string, string) error
+	IsAuthorized func(auth.UserInRepo) error
 }
 
 func (o Options) imputeFromEnv() (Options, error) {
@@ -105,7 +106,7 @@ type server struct {
 	ttl    time.Duration
 	prefix string
 
-	isAuthorized func(string, string) error
+	isAuthorized func(auth.UserInRepo) error
 }
 
 func (s *server) key(oid string) string {
@@ -116,27 +117,6 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/vnd.git-lfs+json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
-	if s.isAuthorized != nil {
-		var err error
-		if username, password, ok := r.BasicAuth(); ok {
-			err = s.isAuthorized(username, password)
-			if err != nil {
-				err = fmt.Errorf("unauthorized: %w", err)
-			}
-		} else {
-			err = errors.New("Unauthorized")
-		}
-
-		if err != nil {
-			w.Header().Set("LFS-Authenticate", `Basic realm="Git LFS"`)
-			w.WriteHeader(401)
-			must(json.NewEncoder(w).Encode(batch.ErrorResponse{
-				Message: err.Error(),
-			}))
-			return
-		}
-	}
-
 	var req batch.Request
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -146,6 +126,31 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			DocURL:  "https://github.com/git-lfs/git-lfs/blob/v2.12.0/docs/api/batch.md#requests",
 		}))
 		return
+	}
+
+	var userInRepo auth.UserInRepo
+	userInRepo.Operation = req.Operation
+	userInRepo.Owner = chi.URLParam(r, "owner")
+	userInRepo.Repo = chi.URLParam(r, "repo")
+	if err = auth.CheckRepoOwner(userInRepo); req.Operation == "upload" || err != nil {
+		if username, password, ok := r.BasicAuth(); ok {
+			userInRepo.Username = username
+			userInRepo.Password = password
+			err = s.isAuthorized(userInRepo)
+			if err != nil {
+				err = fmt.Errorf("unauthorized: %w", err)
+			}
+		} else {
+			err = errors.New("Unauthorized")
+		}
+		if err != nil {
+			w.Header().Set("LFS-Authenticate", `Basic realm="Git LFS"`)
+			w.WriteHeader(401)
+			must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+				Message: err.Error(),
+			}))
+			return
+		}
 	}
 
 	var resp batch.Response

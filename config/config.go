@@ -7,13 +7,13 @@ import (
 )
 
 type Config struct {
+	Prefix             string `json:"PATH_PREFIX"`
 	LfsBucket          string `json:"LFS_BUCKET"`
+	ClientId           string `json:"CLIENT_ID"`
+	ClientSecret       string `json:"CLIENT_SECRET"`
 	AwsRegion          string `json:"AWS_REGION"`
 	AwsAccessKeyId     string `json:"AWS_ACCESS_KEY_ID"`
 	AwsSecretAccessKey string `json:"AWS_SECRET_ACCESS_KEY"`
-	ClientId           string `json:"CLIENT_ID"`
-	ClientSecret       string `json:"CLIENT_SECRET"`
-	Prefix             string `json:"PATH_PREFIX"`
 }
 
 // LoadConfig loads the configuration file from the specified path and deletes the file if needed

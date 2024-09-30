@@ -104,13 +104,13 @@ func main() {
 	}
 
 	s, err := server.New(server.Options{
-		S3Accelerate:    true,
+		Prefix:          cfg.Prefix,
 		Bucket:          bucket,
-		IsAuthorized:    auth.GiteeAuth(),
 		Endpoint:        cfg.AwsRegion,
 		AccessKeyID:     cfg.AwsAccessKeyId,
+		S3Accelerate:    true,
+		IsAuthorized:    auth.GiteeAuth(),
 		SecretAccessKey: cfg.AwsSecretAccessKey,
-		Prefix:          cfg.Prefix,
 	})
 	if err != nil {
 		log.Fatalln(err)

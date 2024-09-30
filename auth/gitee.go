@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	client_id     string
-	client_secret string
+	clientId     string
+	clientSecret string
 )
 
 var (
@@ -50,24 +50,23 @@ type AccessToken struct {
 }
 
 func Init(cfg *config.Config) error {
-	client_id = cfg.ClientId
-	if client_id == "" {
-		client_id = os.Getenv("CLIENT_ID")
-		if client_id == "" {
+	clientId = cfg.ClientId
+	if clientId == "" {
+		clientId = os.Getenv("CLIENT_ID")
+		if clientId == "" {
 			return errors.New("client id required")
 		}
 	}
-	client_secret = cfg.ClientSecret
-	if client_secret == "" {
-		client_secret = os.Getenv("CLIENT_SECRET")
-		if client_secret == "" {
+	clientSecret = cfg.ClientSecret
+	if clientSecret == "" {
+		clientSecret = os.Getenv("CLIENT_SECRET")
+		if clientSecret == "" {
 			return errors.New("client secret required")
 		}
 	}
 
 	return nil
 }
-
 
 func GiteeAuth() func(UserInRepo) error {
 	return func(userInRepo UserInRepo) error {
@@ -128,8 +127,8 @@ func getToken(username, password string) (string, error) {
 	form.Add("grant_type", "password")
 	form.Add("username", username)
 	form.Add("password", password)
-	form.Add("client_id", client_id)
-	form.Add("client_secret", client_secret)
+	form.Add("clientId", clientId)
+	form.Add("clientSecret", clientSecret)
 
 	path := "https://gitee.com/oauth/token"
 	headers := http.Header{"Content-Type": []string{"application/x-www-form-urlencoded"}}

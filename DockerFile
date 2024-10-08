@@ -4,6 +4,7 @@ WORKDIR /home
 COPY . .
 RUN cd ./BigFiles && \
     go get github.com/akrylysov/algnhsa && \
+    go get github.com/sirupsen/logrus && \
     go build ./BigFiles/main.go
 
 FROM openeuler/openeuler:22.03

@@ -2,8 +2,7 @@ FROM golang:1.21 as BUILDER
 
 WORKDIR /home
 COPY . .
-RUN cd ./BigFiles && \
-    go get github.com/akrylysov/algnhsa && \
+RUN go get github.com/akrylysov/algnhsa && \
     go get github.com/sirupsen/logrus && \
     go build ./BigFiles/main.go
 

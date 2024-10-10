@@ -30,12 +30,12 @@ $ git config --local lfs.url https://lfs.test.osinfra.cn/{owner}/{repo}
 - 在fork一个已经使用第三方LFS服务作为LFS远程服务的仓库后，需要手动修改新仓库中LFS远程地址中的{owner}以及{repo}，否则会出现权限校验问题，**错误代码401**。
 - 在使用SSH对Gitee仓库进行克隆后，在使用第三方LFS服务作为LFS远程服务时，仍然需要输入账户和密码。
 
-## 迁移Gitee中使用LFS服务的仓库
+## 迁移Gitee中使用LFS服务的仓库中的大文件
 
 - 克隆仓库
 
 ```
-$ git clone --bare <url>
+$ git clone <url>
 ```
 
 - 在克隆仓库之后，想要获取远端仓库的最新LFS对象
@@ -53,21 +53,15 @@ $ git add .
 $ git commit -m "modify .lfsconfig"
 ```
 
-- 修改仓库远程地址
-
-```
-$ git remote add <新repo> <repo新地址>
-```
-
 - 执行：
 
 ```
-$ git lfs push --all <新repo>
-$ git push --all --force <新repo>
-$ git push --tags --force <新repo>
+$ git lfs push --all origin
+$ git push --all --force origin
+$ git push --tags --force origin
 ```
 
-- 原仓库中的lfs文件成功迁移至新仓库，并存储于第三方lfs服务中
+- 原仓库中的lfs文件成功存储于第三方lfs服务中
 
 ## 关闭第三方LFS功能
 

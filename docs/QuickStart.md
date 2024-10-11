@@ -53,7 +53,7 @@ $ git config --local lfs.url https://lfs.test.osinfra.cn/{owner}/{repo}
     $ git commit -m "modify .lfsconfig"
     ```
 
-4. 执行：
+4. 推送大文件：
 
     ```
     $ git lfs push --all origin

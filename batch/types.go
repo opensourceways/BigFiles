@@ -14,6 +14,11 @@ type Request struct {
 	} `json:"objects"`
 }
 
+type SuccessResponse struct {
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
 type ErrorResponse struct {
 	Message   string `json:"message"`
 	DocURL    string `json:"documentation_url,omitempty"`

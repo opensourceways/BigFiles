@@ -95,27 +95,11 @@ func New(o Options) (http.Handler, error) {
 	}
 
 	r := chi.NewRouter()
-	r.Post("/{owner}/{repo}/objects/batch", s.handleBatch)
+
 	r.Get("/", s.healthCheck)
+	r.Post("/{owner}/{repo}/objects/batch", s.handleBatch)
 
 	return r, nil
-}
-
-type SuccessResponse struct {
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"` // 可选数据字段
-}
-
-func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {
-	response := SuccessResponse{
-		Message: "Success",
-		Data:    "healthCheck success", // 替换为实际的数据
-	}
-
-	// 设置响应头
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK) // 200
-	must(json.NewEncoder(w).Encode(response))
 }
 
 type server struct {
@@ -155,6 +139,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			userInRepo.Username = username
 			userInRepo.Password = password
 			err = s.isAuthorized(userInRepo)
+			// TODO: 若仓库无lfs服务权限，不能返回401，否则会继续提示输入用户名密码。返回403
 			if err != nil {
 				err = fmt.Errorf("unauthorized: %w", err)
 			}
@@ -250,6 +235,17 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	must(json.NewEncoder(w).Encode(resp))
+}
+
+func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {
+	response := batch.SuccessResponse{
+		Message: "Success",
+		Data:    "healthCheck success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	must(json.NewEncoder(w).Encode(response))
 }
 
 // --

@@ -119,8 +119,8 @@ func main() {
 	if strings.HasPrefix(os.Getenv("AWS_EXECUTION_ENV"), "AWS_Lambda_") {
 		algnhsa.ListenAndServe(s, nil)
 	} else {
-		log.Println("serving on http://127.0.0.1:5000 ...")
-		if err := http.ListenAndServe("127.0.0.1:5000", s); err != nil {
+		log.Println("serving on http://0.0.0.0:5000 ...")
+		if err := http.ListenAndServe("0.0.0.0:5000", s); err != nil {
 			log.Fatalln(err)
 		}
 	}

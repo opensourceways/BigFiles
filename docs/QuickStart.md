@@ -12,7 +12,7 @@
 
 ```
 [lfs]  
- 　　url = https://lfs.test.osinfra.cn/{owner}/{repo}
+ 　　 url = https://lfs.test.osinfra.cn/{owner}/{repo}
 ```
 
 - 或者通过命令行设置仓库中LFS远程地址：

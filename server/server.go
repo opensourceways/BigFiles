@@ -96,6 +96,7 @@ func New(o Options) (http.Handler, error) {
 
 	r := chi.NewRouter()
 	r.Post("/{owner}/{repo}/objects/batch", s.handleBatch)
+	r.Get("/", s.healthCheck)
 
 	return r, nil
 }
@@ -232,6 +233,10 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	must(json.NewEncoder(w).Encode(resp))
+}
+
+func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {
+	_, _ = w.Write([]byte("Hello, World!"))
 }
 
 // --

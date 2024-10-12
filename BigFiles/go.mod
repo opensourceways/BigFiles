@@ -30,7 +30,7 @@ require (
 )
 
 replace (
-	github.com/metalogical/BigFiles => github.com/opensourceways/BigFiles v0.0.0-20240930093226-cec367139628
+	github.com/metalogical/BigFiles => github.com/opensourceways/BigFiles v0.0.0-20241012035610-63e677a865f6
 	golang.org/x/crypto => golang.org/x/crypto v0.28.0
 	golang.org/x/net => golang.org/x/net v0.30.0
 	golang.org/x/sys => golang.org/x/sys v0.26.0

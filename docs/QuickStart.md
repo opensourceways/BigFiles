@@ -21,7 +21,8 @@
 $ git config --local lfs.url https://openeuler-bigfiles.test.osinfra.cn/{owner}/{repo}
 ```
 
-当存在.lfsconfig文件时，使用命令行进行LFS远程地址设置的优先级将高于.lfsconfig文件。
+> 当存在.lfsconfig文件时，使用命令行进行LFS远程地址设置的优先级将高于.lfsconfig文件。  
+  url中{owner}/{repo}替换为实际的仓库路径，注意仓库路径的大小写。
 
 ## 第三方LFS服务与Gitee的使用差异
 

@@ -63,8 +63,9 @@ Git LFS initialized.
 git config --local lfs.url https://openeuler-bigfiles.test.osinfra.cn/{owner}/{repo}
 ```
 
-当存在.lfsconfig文件时，使用命令行进行LFS远程地址设置的优先级将高于.lfsconfig文件。  
-在fork一个已经使用第三方LFS服务服务作为LFS远程服务的仓库后，需要手动修改新仓库中LFS远程地址中的{owner}以及{repo}，否则会出现权限校验问题，**错误代码401**。
+> - 当存在.lfsconfig文件时，使用命令行进行LFS远程地址设置的优先级将高于.lfsconfig文件。  
+> - 在fork一个已经使用第三方LFS服务服务作为LFS远程服务的仓库后，需要手动修改新仓库中LFS远程地址中的{owner}以及{repo}，否则会出现权限校验问题，**错误代码401**。  
+> - url中{owner}/{repo}替换为实际的仓库路径，注意仓库路径的大小写。
 
 - 选择要用LFS追踪的文件
 

@@ -4,7 +4,7 @@ WORKDIR /home
 COPY . .
 RUN go get github.com/akrylysov/algnhsa && \
     go get github.com/sirupsen/logrus && \
-    go build ./BigFiles/main.go
+    go build ./main.go
 
 FROM openeuler/openeuler:22.03
 LABEL maintainer="Zhou Yi 1123678689@qq.com"

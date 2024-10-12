@@ -17,7 +17,7 @@ var (
 )
 
 var (
-	allowedRepos        = []string{"openeuler", "src-openeuler"}
+	allowedRepos        = []string{"openeuler", "src-openeuler", "lfs-org"}
 	uploadPermissions   = []string{"admin", "developer"}
 	downloadPermissions = []string{"admin", "developer", "read"}
 )
@@ -127,8 +127,8 @@ func getToken(username, password string) (string, error) {
 	form.Add("grant_type", "password")
 	form.Add("username", username)
 	form.Add("password", password)
-	form.Add("clientId", clientId)
-	form.Add("clientSecret", clientSecret)
+	form.Add("client_id", clientId)
+	form.Add("client_secret", clientSecret)
 
 	path := "https://gitee.com/oauth/token"
 	headers := http.Header{"Content-Type": []string{"application/x-www-form-urlencoded"}}

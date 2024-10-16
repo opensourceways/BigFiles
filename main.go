@@ -6,9 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"time"
 
-	"github.com/akrylysov/algnhsa"
 	"github.com/metalogical/BigFiles/auth"
 	"github.com/metalogical/BigFiles/config"
 	"github.com/metalogical/BigFiles/server"
@@ -112,16 +111,19 @@ func main() {
 		IsAuthorized:    auth.GiteeAuth(),
 		SecretAccessKey: cfg.AwsSecretAccessKey,
 	})
+	srv := &http.Server{
+		Addr:         "0.0.0.0:5000",
+		Handler:      s,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  30 * time.Second,
+	}
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	if strings.HasPrefix(os.Getenv("AWS_EXECUTION_ENV"), "AWS_Lambda_") {
-		algnhsa.ListenAndServe(s, nil)
-	} else {
-		log.Println("serving on http://0.0.0.0:5000 ...")
-		if err := http.ListenAndServe("0.0.0.0:5000", s); err != nil {
-			log.Fatalln(err)
-		}
+	log.Println("serving on http://0.0.0.0:5000 ...")
+	if err := srv.ListenAndServe(); err != nil {
+		log.Fatalln(err)
 	}
 }

@@ -52,9 +52,8 @@ Git LFS initialized.
 通过.lfsconfig文件来配置lfs服务大文件的远程地址，使得将仓库中的大文件上传至第三方LFS服务中。
 
 ```
-# .lfsconfig文件的格式为  
-[lfs]  
- 　　 url = https://openeuler-bigfiles.test.osinfra.cn/{owner}/{repo}
+[lfs]
+　　  url = https://openeuler-bigfiles.test.osinfra.cn/{owner}/{repo}
 ```
 
 - 或者通过命令行设置仓库中LFS远程地址：

@@ -204,18 +204,7 @@ func (s *server) operateRequestObject(resp batch.Response, req batch.Request) {
 			getObjectInput.Expires = int(s.ttl / time.Second)
 			getObjectInput.Headers = map[string]string{"Content-Type": "application/octet-stream"}
 			// 生成下载对象的带授权信息的URL
-			getObjectOutput, err := s.client.CreateSignedUrl(getObjectInput)
-			if err != nil {
-				panic(err)
-			}
-			v, err := url.Parse(getObjectOutput.SignedUrl)
-			if err == nil {
-				v.Host = s.cdnDomain
-				v.Scheme = "https"
-			} else {
-				logrus.Infof("%s cannot be parsed", getObjectOutput.SignedUrl)
-				panic(err)
-			}
+			v := s.generateDownloadUrl(getObjectInput)
 
 			out.Actions = &batch.Actions{
 				Download: &batch.Action{
@@ -254,6 +243,24 @@ func (s *server) operateRequestObject(resp batch.Response, req batch.Request) {
 			}
 		}
 	}
+}
+
+// 生成下载对象的带授权信息的URL
+func (s *server) generateDownloadUrl(getObjectInput *obs.CreateSignedUrlInput) *url.URL {
+	// 生成下载对象的带授权信息的URL
+	getObjectOutput, err := s.client.CreateSignedUrl(getObjectInput)
+	if err != nil {
+		panic(err)
+	}
+	v, err := url.Parse(getObjectOutput.SignedUrl)
+	if err == nil {
+		v.Host = s.cdnDomain
+		v.Scheme = "https"
+	} else {
+		logrus.Infof("%s cannot be parsed", getObjectOutput.SignedUrl)
+		panic(err)
+	}
+	return v
 }
 
 func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {

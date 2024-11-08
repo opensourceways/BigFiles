@@ -133,27 +133,8 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	userInRepo.Owner = chi.URLParam(r, "owner")
 	userInRepo.Repo = chi.URLParam(r, "repo")
 	if err = auth.CheckRepoOwner(userInRepo); req.Operation == "upload" || err != nil {
-		if username, password, ok := r.BasicAuth(); ok {
-			userInRepo.Username = username
-			userInRepo.Password = password
-			err = s.isAuthorized(userInRepo)
-		} else {
-			err = errors.New("unauthorized: cannot get password")
-		}
+		err = s.dealWithAuthError(userInRepo, w, r, err)
 		if err != nil {
-			v := err.Error()
-			switch {
-			case strings.HasPrefix(v, "unauthorized") || strings.HasPrefix(v, "not_found"):
-				w.WriteHeader(401)
-			case strings.HasPrefix(v, "forbidden"):
-				w.WriteHeader(403)
-			default:
-				w.WriteHeader(500)
-			}
-			w.Header().Set("LFS-Authenticate", `Basic realm="Git LFS"`)
-			must(json.NewEncoder(w).Encode(batch.ErrorResponse{
-				Message: v,
-			}))
 			return
 		}
 	}
@@ -182,6 +163,33 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	must(json.NewEncoder(w).Encode(resp))
+}
+
+func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWriter, r *http.Request, err error) error {
+	if username, password, ok := r.BasicAuth(); ok {
+		userInRepo.Username = username
+		userInRepo.Password = password
+		err = s.isAuthorized(userInRepo)
+	} else {
+		err = errors.New("unauthorized: cannot get password")
+	}
+	if err != nil {
+		v := err.Error()
+		switch {
+		case strings.HasPrefix(v, "unauthorized") || strings.HasPrefix(v, "not_found"):
+			w.WriteHeader(401)
+		case strings.HasPrefix(v, "forbidden"):
+			w.WriteHeader(403)
+		default:
+			w.WriteHeader(500)
+		}
+		w.Header().Set("LFS-Authenticate", `Basic realm="Git LFS"`)
+		must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+			Message: v,
+		}))
+		return err
+	}
+	return nil
 }
 
 func (s *server) downloadObject(in *batch.RequestObject, out *batch.Object) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"math"
 	"net/http"
 	"net/url"
@@ -16,7 +17,6 @@ import (
 	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
 	"github.com/metalogical/BigFiles/auth"
 	"github.com/metalogical/BigFiles/batch"
-	"github.com/sirupsen/logrus"
 )
 
 var ObsPutLimit int = 5*int(math.Pow10(9)) - 1 // 5GB - 1
@@ -159,7 +159,11 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var resp batch.Response
+	s.operateRequestObject(resp, req)
+	must(json.NewEncoder(w).Encode(resp))
+}
 
+func (s *server) operateRequestObject(resp batch.Response, req batch.Request) {
 	for _, in := range req.Objects {
 		resp.Objects = append(resp.Objects, batch.Object{
 			OID:  in.OID,
@@ -250,8 +254,6 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
-	must(json.NewEncoder(w).Encode(resp))
 }
 
 func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {

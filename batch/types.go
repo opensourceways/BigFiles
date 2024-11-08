@@ -8,10 +8,12 @@ type Request struct {
 	Ref       struct {
 		Name string `json:"name"`
 	} `json:"ref"`
-	Objects []struct {
-		OID  string `json:"oid"`
-		Size int    `json:"size"`
-	} `json:"objects"`
+	Objects []RequestObject `json:"objects"`
+}
+
+type RequestObject struct {
+	OID  string `json:"oid"`
+	Size int    `json:"size"`
 }
 
 type SuccessResponse struct {

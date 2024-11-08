@@ -157,11 +157,6 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	resp := s.operateRequestObject(req)
-	must(json.NewEncoder(w).Encode(resp))
-}
-
-func (s *server) operateRequestObject(req batch.Request) batch.Response {
 	var resp batch.Response
 	for _, in := range req.Objects {
 		resp.Objects = append(resp.Objects, batch.Object{
@@ -180,69 +175,76 @@ func (s *server) operateRequestObject(req batch.Request) batch.Response {
 
 		switch req.Operation {
 		case "download":
-			getObjectMetadataInput := &obs.GetObjectMetadataInput{
-				Bucket: s.bucket,
-				Key:    s.key(in.OID),
-			}
-			if metadata, err := s.client.GetObjectMetadata(getObjectMetadataInput); err != nil {
-				out.Error = &batch.ObjectError{
-					Code:    404,
-					Message: err.Error(),
-				}
-				continue
-			} else if in.Size != int(metadata.ContentLength) {
-				out.Error = &batch.ObjectError{
-					Code:    422,
-					Message: "found object with wrong size",
-				}
-			}
-			getObjectInput := &obs.CreateSignedUrlInput{}
-			getObjectInput.Method = obs.HttpMethodGet
-			getObjectInput.Bucket = s.bucket
-			getObjectInput.Key = s.key(in.OID)
-			getObjectInput.Expires = int(s.ttl / time.Second)
-			getObjectInput.Headers = map[string]string{"Content-Type": "application/octet-stream"}
-			// 生成下载对象的带授权信息的URL
-			v := s.generateDownloadUrl(getObjectInput)
-
-			out.Actions = &batch.Actions{
-				Download: &batch.Action{
-					HRef:      v.String(),
-					Header:    getObjectInput.Headers,
-					ExpiresIn: int(s.ttl / time.Second),
-				},
-			}
-
+			s.downloadObject(&in, out)
 		case "upload":
-			if out.Size > ObsPutLimit {
-				out.Error = &batch.ObjectError{
-					Code:    422,
-					Message: "cannot upload objects larger than 5GB to S3 via LFS basic transfer adapter",
-				}
-				continue
-			}
-
-			putObjectInput := &obs.CreateSignedUrlInput{}
-			putObjectInput.Method = obs.HttpMethodPut
-			putObjectInput.Bucket = s.bucket
-			putObjectInput.Key = s.key(in.OID)
-			putObjectInput.Expires = int(s.ttl / time.Second)
-			putObjectInput.Headers = map[string]string{"Content-Type": "application/octet-stream"}
-			putObjectOutput, err := s.client.CreateSignedUrl(putObjectInput)
-			if err != nil {
-				panic(err)
-			}
-
-			out.Actions = &batch.Actions{
-				Upload: &batch.Action{
-					HRef:      putObjectOutput.SignedUrl,
-					Header:    putObjectInput.Headers,
-					ExpiresIn: int(s.ttl / time.Second),
-				},
-			}
+			s.uploadObject(&in, out)
 		}
 	}
-	return resp
+	must(json.NewEncoder(w).Encode(resp))
+}
+
+func (s *server) downloadObject(in *batch.RequestObject, out *batch.Object) {
+	getObjectMetadataInput := &obs.GetObjectMetadataInput{
+		Bucket: s.bucket,
+		Key:    s.key(in.OID),
+	}
+	if metadata, err := s.client.GetObjectMetadata(getObjectMetadataInput); err != nil {
+		out.Error = &batch.ObjectError{
+			Code:    404,
+			Message: err.Error(),
+		}
+		return
+	} else if in.Size != int(metadata.ContentLength) {
+		out.Error = &batch.ObjectError{
+			Code:    422,
+			Message: "found object with wrong size",
+		}
+	}
+	getObjectInput := &obs.CreateSignedUrlInput{}
+	getObjectInput.Method = obs.HttpMethodGet
+	getObjectInput.Bucket = s.bucket
+	getObjectInput.Key = s.key(in.OID)
+	getObjectInput.Expires = int(s.ttl / time.Second)
+	getObjectInput.Headers = map[string]string{"Content-Type": "application/octet-stream"}
+	// 生成下载对象的带授权信息的URL
+	v := s.generateDownloadUrl(getObjectInput)
+
+	out.Actions = &batch.Actions{
+		Download: &batch.Action{
+			HRef:      v.String(),
+			Header:    getObjectInput.Headers,
+			ExpiresIn: int(s.ttl / time.Second),
+		},
+	}
+}
+
+func (s *server) uploadObject(in *batch.RequestObject, out *batch.Object) {
+	if out.Size > ObsPutLimit {
+		out.Error = &batch.ObjectError{
+			Code:    422,
+			Message: "cannot upload objects larger than 5GB to S3 via LFS basic transfer adapter",
+		}
+		return
+	}
+
+	putObjectInput := &obs.CreateSignedUrlInput{}
+	putObjectInput.Method = obs.HttpMethodPut
+	putObjectInput.Bucket = s.bucket
+	putObjectInput.Key = s.key(in.OID)
+	putObjectInput.Expires = int(s.ttl / time.Second)
+	putObjectInput.Headers = map[string]string{"Content-Type": "application/octet-stream"}
+	putObjectOutput, err := s.client.CreateSignedUrl(putObjectInput)
+	if err != nil {
+		panic(err)
+	}
+
+	out.Actions = &batch.Actions{
+		Upload: &batch.Action{
+			HRef:      putObjectOutput.SignedUrl,
+			Header:    putObjectInput.Headers,
+			ExpiresIn: int(s.ttl / time.Second),
+		},
+	}
 }
 
 // 生成下载对象的带授权信息的URL

@@ -7,32 +7,31 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// SuiteUserInRepo used for testing
-type SuiteUserInRepo struct {
+// SuiteGitee used for testing
+type SuiteGitee struct {
 	suite.Suite
 	Repo  string
 	Owner string
 }
 
 // SetupSuite used for testing
-func (s *SuiteUserInRepo) SetupSuite() {
+func (s *SuiteGitee) SetupSuite() {
 	s.Repo = "software-package-server"
 	s.Owner = "src-openeuler"
 }
 
 // TearDownSuite used for testing
-func (s *SuiteUserInRepo) TearDownSuite() {
-
+func (s *SuiteGitee) TearDownSuite() {
 }
 
-func (s *SuiteUserInRepo) TestGetToken() {
+func (s *SuiteGitee) TestGetToken() {
 	// getToken fail
 	token, err := getToken("user", "wrong_pwd")
 	assert.Equal(s.T(), "", token)
 	assert.NotNil(s.T(), err.Error())
 }
 
-func (s *SuiteUserInRepo) TestCheckRepoOwner() {
+func (s *SuiteGitee) TestCheckRepoOwner() {
 	// CheckRepoOwner success
 	userInRepo := UserInRepo{
 		Repo:  s.Repo,
@@ -50,7 +49,7 @@ func (s *SuiteUserInRepo) TestCheckRepoOwner() {
 	assert.NotNil(s.T(), err)
 }
 
-func (s *SuiteUserInRepo) TestVerifyUser() {
+func (s *SuiteGitee) TestVerifyUser() {
 	userInRepo := UserInRepo{
 		Repo:      s.Repo,
 		Owner:     s.Owner,
@@ -62,5 +61,5 @@ func (s *SuiteUserInRepo) TestVerifyUser() {
 }
 
 func TestGitee(t *testing.T) {
-	suite.Run(t, new(SuiteUserInRepo))
+	suite.Run(t, new(SuiteGitee))
 }

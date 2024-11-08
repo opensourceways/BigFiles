@@ -157,13 +157,12 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
-	var resp batch.Response
-	s.operateRequestObject(resp, req)
+	resp := s.operateRequestObject(req)
 	must(json.NewEncoder(w).Encode(resp))
 }
 
-func (s *server) operateRequestObject(resp batch.Response, req batch.Request) {
+func (s *server) operateRequestObject(req batch.Request) batch.Response {
+	var resp batch.Response
 	for _, in := range req.Objects {
 		resp.Objects = append(resp.Objects, batch.Object{
 			OID:  in.OID,
@@ -243,6 +242,7 @@ func (s *server) operateRequestObject(resp batch.Response, req batch.Request) {
 			}
 		}
 	}
+	return resp
 }
 
 // 生成下载对象的带授权信息的URL

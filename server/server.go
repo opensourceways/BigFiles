@@ -158,7 +158,8 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var resp batch.Response
-	for _, in := range req.Objects {
+	for i := 0; i < len(req.Objects); i++ {
+		in := req.Objects[i]
 		resp.Objects = append(resp.Objects, batch.Object{
 			OID:  in.OID,
 			Size: in.Size,

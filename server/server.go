@@ -133,7 +133,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	userInRepo.Owner = chi.URLParam(r, "owner")
 	userInRepo.Repo = chi.URLParam(r, "repo")
 	if err = auth.CheckRepoOwner(userInRepo); req.Operation == "upload" || err != nil {
-		err = s.dealWithAuthError(userInRepo, w, r, err)
+		err := s.dealWithAuthError(userInRepo, w, r)
 		if err != nil {
 			return
 		}
@@ -165,7 +165,8 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	must(json.NewEncoder(w).Encode(resp))
 }
 
-func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWriter, r *http.Request, err error) error {
+func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWriter, r *http.Request) error {
+	var err error
 	if username, password, ok := r.BasicAuth(); ok {
 		userInRepo.Username = username
 		userInRepo.Password = password

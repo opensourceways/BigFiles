@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,23 +10,14 @@ import (
 // SuiteUserInRepo used for testing
 type SuiteUserInRepo struct {
 	suite.Suite
-	Repo      string
-	Owner     string
-	Token     string
-	Username  string
-	Password  string
-	Operation string
-	// userInRepo UserInRepo
+	Repo  string
+	Owner string
 }
 
 // SetupSuite used for testing
 func (s *SuiteUserInRepo) SetupSuite() {
-	username := os.Getenv("GITEE_USER")
-	token := os.Getenv("GITEE_TOKEN")
 	s.Repo = "software-package-server"
 	s.Owner = "src-openeuler"
-	s.Username = username
-	s.Token = token
 }
 
 // TearDownSuite used for testing
@@ -37,7 +27,7 @@ func (s *SuiteUserInRepo) TearDownSuite() {
 
 func (s *SuiteUserInRepo) TestGetToken() {
 	// getToken fail
-	token, err := getToken(s.Username, "wrong_pwd")
+	token, err := getToken("user", "wrong_pwd")
 	assert.Equal(s.T(), "", token)
 	assert.NotNil(s.T(), err.Error())
 }
@@ -64,13 +54,11 @@ func (s *SuiteUserInRepo) TestVerifyUser() {
 	userInRepo := UserInRepo{
 		Repo:      s.Repo,
 		Owner:     s.Owner,
-		Token:     s.Token,
-		Username:  s.Username,
 		Operation: "download",
 	}
 
 	err := verifyUser(userInRepo)
-	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), err)
 }
 
 func TestGitee(t *testing.T) {

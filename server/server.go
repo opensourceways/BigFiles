@@ -132,6 +132,15 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	userInRepo.Operation = req.Operation
 	userInRepo.Owner = chi.URLParam(r, "owner")
 	userInRepo.Repo = chi.URLParam(r, "repo")
+
+	if !validatecfg.ownerRegexp.MatchString(userInRepo.Owner) || !validatecfg.reponameRegexp.MatchString(userInRepo.Repo) {
+		w.WriteHeader(http.StatusBadRequest)
+		must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+			Message: "invalid owner or reponame format",
+		}))
+		return
+	}
+
 	if err = auth.CheckRepoOwner(userInRepo); req.Operation == "upload" || err != nil {
 		err := s.dealWithAuthError(userInRepo, w, r)
 		if err != nil {
@@ -189,6 +198,15 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 			Message: v,
 		}))
 		return err
+	}
+
+	if !validatecfg.usernameRegexp.MatchString(userInRepo.Username) ||
+		!validatecfg.passwordRegexp.MatchString(userInRepo.Password) {
+		w.WriteHeader(http.StatusBadRequest)
+		must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+			Message: "invalid username or password format",
+		}))
+		return errors.New("invalid username or password format")
 	}
 	return nil
 }

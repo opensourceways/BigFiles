@@ -179,6 +179,15 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 	if username, password, ok := r.BasicAuth(); ok {
 		userInRepo.Username = username
 		userInRepo.Password = password
+
+		if !validatecfg.usernameRegexp.MatchString(userInRepo.Username) ||
+			!validatecfg.passwordRegexp.MatchString(userInRepo.Password) {
+			w.WriteHeader(http.StatusBadRequest)
+			must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+				Message: "invalid username or password format",
+			}))
+			return errors.New("invalid username or password format")
+		}
 		err = s.isAuthorized(userInRepo)
 	} else {
 		err = errors.New("unauthorized: cannot get password")
@@ -200,14 +209,6 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 		return err
 	}
 
-	if !validatecfg.usernameRegexp.MatchString(userInRepo.Username) ||
-		!validatecfg.passwordRegexp.MatchString(userInRepo.Password) {
-		w.WriteHeader(http.StatusBadRequest)
-		must(json.NewEncoder(w).Encode(batch.ErrorResponse{
-			Message: "invalid username or password format",
-		}))
-		return errors.New("invalid username or password format")
-	}
 	return nil
 }
 

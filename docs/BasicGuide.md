@@ -53,13 +53,13 @@ Git LFS initialized.
 
 ```
 [lfs]
-    url = https://openeuler-bigfiles.test.osinfra.cn/{owner}/{repo}
+    url = https://artifacts.openeuler.openatom.cn/{owner}/{repo}
 ```
 
 - 或者通过命令行设置仓库中LFS远程地址：
 
 ```
-git config --local lfs.url https://openeuler-bigfiles.test.osinfra.cn/{owner}/{repo}
+git config --local lfs.url https://artifacts.openeuler.openatom.cn/{owner}/{repo}
 ```
 
 > - 当存在.lfsconfig文件时，使用命令行进行LFS远程地址设置的优先级将高于.lfsconfig文件。  

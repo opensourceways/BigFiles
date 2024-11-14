@@ -173,9 +173,9 @@ func verifyUser(userInRepo UserInRepo) error {
 		msg := fmt.Sprintf("forbidden: user %s has no permission to upload to %s/%s",
 			userInRepo.Username, userInRepo.Owner, userInRepo.Repo)
 		remindMsg := " \n如果您正在向fork仓库上传大文件，请确认您已使用如下命令修改了本地仓库的配置：" +
-			"\n`git config --local lfs.url https://openeuler-bigfiles.test.osinfra.cn/{owner}/{repo}`" +
+			"\n`git config --local lfs.url https://artifacts.openeuler.openatom.cn/{owner}/{repo}`" +
 			"，\n其中{owner}/{repo}请改为您fork之后的仓库的名称。" +
-			"详阅：https://github.com/opensourceways/BigFiles/blob/master/docs/QuickStart.md"
+			"详阅：https://gitee.com/openeuler/community/blob/master/zh/contributors/create-package.md"
 		logrus.Error(fmt.Sprintf("verifyUser | %s", msg))
 		return errors.New(msg + remindMsg)
 	} else if userInRepo.Operation == "download" {

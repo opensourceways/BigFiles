@@ -237,6 +237,7 @@ func (s *server) uploadObject(in *batch.RequestObject, out *batch.Object) {
 	checkInput := s.getObjectMetadataInput(s.bucket, s.key(in.OID))
 	_, err := s.client.GetObjectMetadata(&checkInput)
 	if err == nil {
+		logrus.Infof("object already exists: %s", in.OID)
 		return
 	}
 

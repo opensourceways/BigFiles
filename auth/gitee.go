@@ -15,6 +15,7 @@ import (
 var (
 	clientId     string
 	clientSecret string
+	defaultToken string
 )
 
 var (
@@ -64,6 +65,13 @@ func Init(cfg *config.Config) error {
 			return errors.New("client secret required")
 		}
 	}
+	defaultToken = cfg.DefaultToken
+	if defaultToken == "" {
+		defaultToken = os.Getenv("DEFAULT_TOKEN")
+		if defaultToken == "" {
+			return errors.New("default token required")
+		}
+	}
 
 	return nil
 }
@@ -96,6 +104,8 @@ func CheckRepoOwner(userInRepo UserInRepo) error {
 	)
 	if userInRepo.Token != "" {
 		path += fmt.Sprintf("?access_token=%s", userInRepo.Token)
+	} else {
+		path += fmt.Sprintf("?access_token=%s", defaultToken)
 	}
 	headers := http.Header{"Content-Type": []string{"application/json;charset=UTF-8"}}
 	repo := new(Repo)
@@ -154,6 +164,8 @@ func verifyUser(userInRepo UserInRepo) error {
 	)
 	if userInRepo.Token != "" {
 		path += fmt.Sprintf("?access_token=%s", userInRepo.Token)
+	} else {
+		path += fmt.Sprintf("?access_token=%s", defaultToken)
 	}
 	headers := http.Header{"Content-Type": []string{"application/json;charset=UTF-8"}}
 	giteeUser := new(giteeUser)

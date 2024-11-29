@@ -24,6 +24,9 @@ var (
 	downloadPermissions = []string{"admin", "developer", "read"}
 )
 
+var contentType = "Content-Type"
+var verifyLog = "verifyUser"
+
 type giteeUser struct {
 	Permission string `json:"permission"`
 }
@@ -107,7 +110,7 @@ func CheckRepoOwner(userInRepo UserInRepo) error {
 	} else {
 		path += fmt.Sprintf("?access_token=%s", defaultToken)
 	}
-	headers := http.Header{"Content-Type": []string{"application/json;charset=UTF-8"}}
+	headers := http.Header{contentType: []string{"application/json;charset=UTF-8"}}
 	repo := new(Repo)
 	err := getParsedResponse("GET", path, headers, nil, &repo)
 	if err != nil {
@@ -143,7 +146,7 @@ func getToken(username, password string) (string, error) {
 	form.Add("client_secret", clientSecret)
 
 	path := "https://gitee.com/oauth/token"
-	headers := http.Header{"Content-Type": []string{"application/x-www-form-urlencoded"}}
+	headers := http.Header{contentType: []string{"application/x-www-form-urlencoded"}}
 	accessToken := new(AccessToken)
 	err := getParsedResponse("POST", path, headers, strings.NewReader(form.Encode()), &accessToken)
 	if err != nil {
@@ -167,12 +170,12 @@ func verifyUser(userInRepo UserInRepo) error {
 	} else {
 		path += fmt.Sprintf("?access_token=%s", defaultToken)
 	}
-	headers := http.Header{"Content-Type": []string{"application/json;charset=UTF-8"}}
+	headers := http.Header{contentType: []string{"application/json;charset=UTF-8"}}
 	giteeUser := new(giteeUser)
 	err := getParsedResponse("GET", path, headers, nil, &giteeUser)
 	if err != nil {
 		msg := err.Error() + ": verify user permission failed"
-		logrus.Error(fmt.Sprintf("verifyUser | %s", msg))
+		logrus.Error(fmt.Sprintf("%s | %s", verifyLog, msg))
 		return errors.New(msg)
 	}
 
@@ -187,7 +190,7 @@ func verifyUser(userInRepo UserInRepo) error {
 		remindMsg := " \n如果您正在向fork仓库上传大文件，请确认您已使用如下命令修改了本地仓库的配置：" +
 			"\n`git config --local lfs.url https://artifacts.openeuler.openatom.cn/{owner}/{repo}`" +
 			"，\n其中{owner}/{repo}请改为您fork之后的仓库的名称"
-		logrus.Error(fmt.Sprintf("verifyUser | %s", msg))
+		logrus.Error(fmt.Sprintf("%s | %s", verifyLog, msg))
 		return errors.New(msg + remindMsg)
 	} else if userInRepo.Operation == "download" {
 		for _, v := range downloadPermissions {
@@ -196,11 +199,11 @@ func verifyUser(userInRepo UserInRepo) error {
 			}
 		}
 		msg := fmt.Sprintf("forbidden: user %s has no permission to download", userInRepo.Username)
-		logrus.Error(fmt.Sprintf("verifyUser | %s", msg))
+		logrus.Error(fmt.Sprintf("%s | %s", verifyLog, msg))
 		return errors.New(msg)
 	} else {
 		msg := "system_error: unknow operation"
-		logrus.Error(fmt.Sprintf("verifyUser | %s", msg))
+		logrus.Error(fmt.Sprintf("%s | %s", verifyLog, msg))
 		return errors.New(msg)
 	}
 }

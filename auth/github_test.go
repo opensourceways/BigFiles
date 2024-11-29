@@ -20,10 +20,6 @@ func (s *SuiteGithub) SetupSuite() {
 	s.Password = "password"
 }
 
-// TearDownSuite used for testing
-func (s *SuiteGithub) TearDownSuite() {
-}
-
 func (s *SuiteGithub) TestStatic() {
 	// Static success
 	static := Static(s.Username, s.Password)

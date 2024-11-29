@@ -20,10 +20,6 @@ func (s *SuiteGitee) SetupSuite() {
 	s.Owner = "src-openeuler"
 }
 
-// TearDownSuite used for testing
-func (s *SuiteGitee) TearDownSuite() {
-}
-
 func (s *SuiteGitee) TestGetToken() {
 	// getToken fail
 	token, err := getToken("user", "wrong_pwd")

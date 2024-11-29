@@ -213,11 +213,8 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 }
 
 func (s *server) downloadObject(in *batch.RequestObject, out *batch.Object) {
-	getObjectMetadataInput := &obs.GetObjectMetadataInput{
-		Bucket: s.bucket,
-		Key:    s.key(in.OID),
-	}
-	if metadata, err := s.client.GetObjectMetadata(getObjectMetadataInput); err != nil {
+	getObjectMetadataInput := s.getObjectMetadataInput(s.bucket, s.key(in.OID))
+	if metadata, err := s.client.GetObjectMetadata(&getObjectMetadataInput); err != nil {
 		out.Error = &batch.ObjectError{
 			Code:    404,
 			Message: err.Error(),
@@ -256,6 +253,13 @@ func (s *server) uploadObject(in *batch.RequestObject, out *batch.Object) {
 		return
 	}
 
+	checkInput := s.getObjectMetadataInput(s.bucket, s.key(in.OID))
+	_, err := s.client.GetObjectMetadata(&checkInput)
+	if err == nil {
+		logrus.Infof("object already exists: %s", in.OID)
+		return
+	}
+
 	putObjectInput := &obs.CreateSignedUrlInput{}
 	putObjectInput.Method = obs.HttpMethodPut
 	putObjectInput.Bucket = s.bucket
@@ -273,6 +277,13 @@ func (s *server) uploadObject(in *batch.RequestObject, out *batch.Object) {
 			Header:    putObjectInput.Headers,
 			ExpiresIn: int(s.ttl / time.Second),
 		},
+	}
+}
+
+func (s *server) getObjectMetadataInput(bucket string, key string) obs.GetObjectMetadataInput {
+	return obs.GetObjectMetadataInput{
+		Bucket: bucket,
+		Key:    key,
 	}
 }
 

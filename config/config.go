@@ -16,6 +16,7 @@ type Config struct {
 	ObsAccessKeyId     string         `json:"OBS_ACCESS_KEY_ID"`
 	ObsSecretAccessKey string         `json:"OBS_SECRET_ACCESS_KEY"`
 	ValidateConfig     ValidateConfig `json:"VALIDATE_REGEXP"`
+	DefaultToken       string         `json:"DEFAULT_TOKEN"`
 }
 
 type ValidateConfig struct {

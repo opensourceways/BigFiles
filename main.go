@@ -24,7 +24,7 @@ type ServiceOptions struct {
 	RemoveCfg  bool
 }
 
-// Validate checks if the ServiceOptions are valid.111
+// Validate checks if the ServiceOptions are valid.11111
 // It returns an error if the config file is missing.
 func (o *ServiceOptions) Validate() error {
 	if o.ConfigFile == "" {

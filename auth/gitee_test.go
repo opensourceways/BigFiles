@@ -63,6 +63,7 @@ func (s *SuiteGitee) TestCheckRepoOwner() {
 	userInRepo := UserInRepo{
 		Repo:  s.Repo,
 		Owner: s.Owner,
+		Token: s.cfg.DefaultToken,
 	}
 	err := CheckRepoOwner(userInRepo)
 	assert.NotNil(s.T(), err)
@@ -80,7 +81,9 @@ func (s *SuiteGitee) TestVerifyUser() {
 	userInRepo := UserInRepo{
 		Repo:      s.Repo,
 		Owner:     s.Owner,
+		Username:  s.UserName,
 		Operation: "download",
+		Token:     s.cfg.DefaultToken,
 	}
 
 	err := verifyUser(userInRepo)

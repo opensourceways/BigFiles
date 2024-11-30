@@ -26,6 +26,7 @@ var (
 
 var contentType = "Content-Type"
 var verifyLog = "verifyUser"
+var appendPathAccessToken = "?access_token="
 
 type giteeUser struct {
 	Permission string `json:"permission"`
@@ -106,9 +107,9 @@ func CheckRepoOwner(userInRepo UserInRepo) error {
 		userInRepo.Repo,
 	)
 	if userInRepo.Token != "" {
-		path += fmt.Sprintf("?access_token=%s", userInRepo.Token)
+		path += fmt.Sprintf(appendPathAccessToken + userInRepo.Token)
 	} else {
-		path += fmt.Sprintf("?access_token=%s", defaultToken)
+		path += fmt.Sprintf(appendPathAccessToken + defaultToken)
 	}
 	headers := http.Header{contentType: []string{"application/json;charset=UTF-8"}}
 	repo := new(Repo)
@@ -166,44 +167,52 @@ func verifyUser(userInRepo UserInRepo) error {
 		userInRepo.Username,
 	)
 	if userInRepo.Token != "" {
-		path += fmt.Sprintf("?access_token=%s", userInRepo.Token)
+		path += fmt.Sprintf(appendPathAccessToken + userInRepo.Token)
 	} else {
-		path += fmt.Sprintf("?access_token=%s", defaultToken)
+		path += fmt.Sprintf(appendPathAccessToken + defaultToken)
 	}
 	headers := http.Header{contentType: []string{"application/json;charset=UTF-8"}}
 	giteeUser := new(giteeUser)
 	err := getParsedResponse("GET", path, headers, nil, &giteeUser)
 	if err != nil {
 		msg := err.Error() + ": verify user permission failed"
-		logrus.Error(fmt.Sprintf("%s | %s", verifyLog, msg))
+		logrus.Error(fmt.Sprintf(verifyLog + " | " + msg))
 		return errors.New(msg)
 	}
 
 	if userInRepo.Operation == "upload" {
-		for _, v := range uploadPermissions {
-			if giteeUser.Permission == v {
-				return nil
-			}
-		}
-		msg := fmt.Sprintf("forbidden: user %s has no permission to upload to %s/%s",
-			userInRepo.Username, userInRepo.Owner, userInRepo.Repo)
-		remindMsg := " \n如果您正在向fork仓库上传大文件，请确认您已使用如下命令修改了本地仓库的配置：" +
-			"\n`git config --local lfs.url https://artifacts.openeuler.openatom.cn/{owner}/{repo}`" +
-			"，\n其中{owner}/{repo}请改为您fork之后的仓库的名称"
-		logrus.Error(fmt.Sprintf("%s | %s", verifyLog, msg))
-		return errors.New(msg + remindMsg)
+		return verifyUserUpload(giteeUser, userInRepo)
 	} else if userInRepo.Operation == "download" {
-		for _, v := range downloadPermissions {
-			if giteeUser.Permission == v {
-				return nil
-			}
-		}
-		msg := fmt.Sprintf("forbidden: user %s has no permission to download", userInRepo.Username)
-		logrus.Error(fmt.Sprintf("%s | %s", verifyLog, msg))
-		return errors.New(msg)
+		return verifyUserDownload(giteeUser, userInRepo)
 	} else {
 		msg := "system_error: unknow operation"
-		logrus.Error(fmt.Sprintf("%s | %s", verifyLog, msg))
+		logrus.Error(fmt.Sprintf(verifyLog + " | " + msg))
 		return errors.New(msg)
 	}
+}
+
+func verifyUserUpload(giteeUser *giteeUser, userInRepo UserInRepo) error {
+	for _, v := range uploadPermissions {
+		if giteeUser.Permission == v {
+			return nil
+		}
+	}
+	msg := fmt.Sprintf("forbidden: user %s has no permission to upload to %s/%s",
+		userInRepo.Username, userInRepo.Owner, userInRepo.Repo)
+	remindMsg := " \n如果您正在向fork仓库上传大文件，请确认您已使用如下命令修改了本地仓库的配置：" +
+		"\n`git config --local lfs.url https://artifacts.openeuler.openatom.cn/{owner}/{repo}`" +
+		"，\n其中{owner}/{repo}请改为您fork之后的仓库的名称"
+	logrus.Error(fmt.Sprintf(verifyLog + " | " + msg))
+	return errors.New(msg + remindMsg)
+}
+
+func verifyUserDownload(giteeUser *giteeUser, userInRepo UserInRepo) error {
+	for _, v := range downloadPermissions {
+		if giteeUser.Permission == v {
+			return nil
+		}
+	}
+	msg := fmt.Sprintf("forbidden: user %s has no permission to download", userInRepo.Username)
+	logrus.Error(fmt.Sprintf(verifyLog + " | " + msg))
+	return errors.New(msg)
 }

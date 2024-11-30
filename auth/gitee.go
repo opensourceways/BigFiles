@@ -24,10 +24,9 @@ var (
 	downloadPermissions = []string{"admin", "developer", "read"}
 )
 
-var contentType = "Content-Type"
-var verifyLog = "verifyUser"
-var appendPathAccessToken = "?access_token="
-
+const contentType = "Content-Type"
+const verifyLog = "verifyUser"
+const appendPathAccessToken = "?access_token="
 const formatLogString = "%s | %s"
 
 type giteeUser struct {
@@ -204,7 +203,7 @@ func verifyUserUpload(giteeUser *giteeUser, userInRepo UserInRepo) error {
 	msg := fmt.Sprintf("forbidden: user %s has no permission to upload to %s/%s",
 		userInRepo.Username, userInRepo.Owner, userInRepo.Repo)
 	remindMsg := " \n如果您正在向fork仓库上传大文件，请确认您已使用如下命令修改了本地仓库的配置：" +
-		"\n`git config --local lfs.url https://artifacts.openeuler.openatom.cn/{owner}/{repo}`" +
+		"\n`git config --local lfs.url https://artlfs.openeuler.openatom.cn/{owner}/{repo}`" +
 		"，\n其中{owner}/{repo}请改为您fork之后的仓库的名称"
 	logrus.Error(fmt.Sprintf(formatLogString, verifyLog, msg))
 	return errors.New(msg + remindMsg)

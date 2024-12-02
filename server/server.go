@@ -21,6 +21,7 @@ import (
 
 var ObsPutLimit int = 5*int(math.Pow10(9)) - 1 // 5GB - 1
 var oidRegexp = regexp.MustCompile("^[a-f0-9]{64}$")
+var contentType = "Content-Type"
 
 type Options struct {
 	// required
@@ -114,7 +115,7 @@ func (s *server) key(oid string) string {
 }
 
 func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/vnd.git-lfs+json")
+	w.Header().Set(contentType, "application/vnd.git-lfs+json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
 	var req batch.Request
@@ -132,6 +133,15 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	userInRepo.Operation = req.Operation
 	userInRepo.Owner = chi.URLParam(r, "owner")
 	userInRepo.Repo = chi.URLParam(r, "repo")
+
+	if !validatecfg.ownerRegexp.MatchString(userInRepo.Owner) || !validatecfg.reponameRegexp.MatchString(userInRepo.Repo) {
+		w.WriteHeader(http.StatusBadRequest)
+		must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+			Message: "invalid owner or reponame format",
+		}))
+		return
+	}
+
 	if err = auth.CheckRepoOwner(userInRepo); req.Operation == "upload" || err != nil {
 		err := s.dealWithAuthError(userInRepo, w, r)
 		if err != nil {
@@ -160,6 +170,8 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			s.downloadObject(&in, out)
 		case "upload":
 			s.uploadObject(&in, out)
+		default:
+			continue
 		}
 	}
 	must(json.NewEncoder(w).Encode(resp))
@@ -170,6 +182,15 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 	if username, password, ok := r.BasicAuth(); ok {
 		userInRepo.Username = username
 		userInRepo.Password = password
+
+		if !validatecfg.usernameRegexp.MatchString(userInRepo.Username) ||
+			!validatecfg.passwordRegexp.MatchString(userInRepo.Password) {
+			w.WriteHeader(http.StatusBadRequest)
+			must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+				Message: "invalid username or password format",
+			}))
+			return errors.New("invalid username or password format")
+		}
 		err = s.isAuthorized(userInRepo)
 	} else {
 		err = errors.New("unauthorized: cannot get password")
@@ -190,6 +211,7 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 		}))
 		return err
 	}
+
 	return nil
 }
 
@@ -206,13 +228,15 @@ func (s *server) downloadObject(in *batch.RequestObject, out *batch.Object) {
 			Code:    422,
 			Message: "found object with wrong size",
 		}
+	} else {
+		logrus.Infof("Metadata check pass, Size check pass")
 	}
 	getObjectInput := &obs.CreateSignedUrlInput{}
 	getObjectInput.Method = obs.HttpMethodGet
 	getObjectInput.Bucket = s.bucket
 	getObjectInput.Key = s.key(in.OID)
 	getObjectInput.Expires = int(s.ttl / time.Second)
-	getObjectInput.Headers = map[string]string{"Content-Type": "application/octet-stream"}
+	getObjectInput.Headers = map[string]string{contentType: "application/octet-stream"}
 	// 生成下载对象的带授权信息的URL
 	v := s.generateDownloadUrl(getObjectInput)
 
@@ -246,7 +270,7 @@ func (s *server) uploadObject(in *batch.RequestObject, out *batch.Object) {
 	putObjectInput.Bucket = s.bucket
 	putObjectInput.Key = s.key(in.OID)
 	putObjectInput.Expires = int(s.ttl / time.Second)
-	putObjectInput.Headers = map[string]string{"Content-Type": "application/octet-stream"}
+	putObjectInput.Headers = map[string]string{contentType: "application/octet-stream"}
 	putObjectOutput, err := s.client.CreateSignedUrl(putObjectInput)
 	if err != nil {
 		panic(err)
@@ -292,7 +316,7 @@ func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {
 		Data:    "healthCheck success",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(contentType, "application/json")
 	w.WriteHeader(http.StatusOK)
 	must(json.NewEncoder(w).Encode(response))
 }

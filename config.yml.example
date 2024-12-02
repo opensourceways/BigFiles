@@ -1,8 +1,16 @@
-LFS_BUCKET: ***********
-CDN_DOMAIN: ***********
-OBS_REGION: ***********
-OBS_ACCESS_KEY_ID: ***********
-OBS_SECRET_ACCESS_KEY: ***********
-CLIENT_ID: ***********
-CLIENT_SECRET: ***********
-PATH_PREFIX: ***********
+{
+    "LFS_BUCKET": ***********
+    "CDN_DOMAIN": ***********
+    "OBS_REGION": ***********
+    "OBS_ACCESS_KEY_ID": ***********
+    "OBS_SECRET_ACCESS_KEY": ***********
+    "CLIENT_ID": ***********
+    "CLIENT_SECRET": ***********
+    "PATH_PREFIX": ***********
+    "VALIDATE_REGEXP": {
+        "OWNER_REGEXP": "^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$",
+        "REPONAME_REGEXP": "^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$",
+        "USERNAME_REGEXP": "^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$",
+        "PASSWORD_REGEXP": "^[a-zA-Z0-9!@_#$%^&*()\\-=+,?.,]*$"
+    }
+}

@@ -88,6 +88,12 @@ func main() {
 		return
 	}
 
+	if err := server.Init(cfg.ValidateConfig); err != nil {
+		logrus.Errorf("load ValidateConfig, err:%s", err.Error())
+
+		return
+	}
+
 	if err := auth.Init(cfg); err != nil {
 		logrus.Errorf("load gitee config, err:%s", err.Error())
 

@@ -47,7 +47,9 @@ func Test_getParsedResponse(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.wantErr(t, getParsedResponse(tt.args.method, tt.args.path, tt.args.header, tt.args.body, tt.args.obj), fmt.Sprintf("getParsedResponse test, name:%v", tt.name))
+			tt.wantErr(t,
+				getParsedResponse(tt.args.method, tt.args.path, tt.args.header, tt.args.body, tt.args.obj),
+				fmt.Sprintf("getParsedResponse test, name:%v", tt.name))
 		})
 	}
 }

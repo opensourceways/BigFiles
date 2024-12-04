@@ -17,3 +17,4 @@ v2.12.0](https://github.com/git-lfs/git-lfs/tree/v2.12.0/docs/api) server.
 7. ~~仓库添加github action。~~
 8. ~~添加日志。~~
 9. 支持cdn。
+10. 测试

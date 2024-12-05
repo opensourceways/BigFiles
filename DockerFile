@@ -23,22 +23,11 @@ WORKDIR /etc/ssh
 #生成ssh服务本地秘钥
 RUN ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key -N ""
 
-#编写ssh服务启动与端口转发脚本
-RUN echo '#!/bin/bash' > /port_forward.sh && \
-    echo 'sshpass -p '123456' ssh -L 23231:gitee.com:22 -o ServerAliveInterval=20 -o StrictHostKeyChecking=no -gNf localhost' >> /port_forward.sh && \
-    chmod +x /port_forward.sh
-
-RUN echo '#!/bin/bash' > /start.sh && \
-    echo "/usr/sbin/sshd &" >> /start.sh && \
-    echo "/port_forward.sh &" >> /start.sh && \
-    echo "wait" >> /start.sh && \
-    chmod +x /start.sh
-
-RUN echo '#!/bin/bash' > /begin.sh && \
-    echo "/start.sh" >> /begin.sh && \
-    echo "/start.sh" >> /begin.sh && \
-    echo "/home/BigFiles/main \$1" >> /begin.sh && \
-    chmod +x /begin.sh
+#复制ssh服务启动与端口转发脚本
+COPY --chown=BigFiles:group --from=BUILDER /home/scripts/ssh /
+RUN chmod +x /port_forward.sh
+RUN chmod +x /start.sh
+RUN chmod +x /begin.sh
 
 WORKDIR /home/BigFiles
 COPY --chown=BigFiles:group --from=BUILDER /home/main /home/BigFiles/main

@@ -1,5 +1,4 @@
 #!/bin/bash
-#/usr/sbin/sshd &
-systemctl restart sshd &
+/usr/sbin/sshd &
 /port_forward.sh &
 wait

@@ -22,6 +22,8 @@ RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/
 WORKDIR /etc/ssh
 #生成ssh服务本地秘钥
 RUN ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key -N ""
+RUN ssh-keygen -t rsa -f /etc/ssh/ssh_host_ecdsa_key -N ""
+RUN ssh-keygen -t rsa -f /etc/ssh/ssh_host_ed25519_key -N ""
 
 #复制ssh服务启动与端口转发脚本
 COPY --chown=BigFiles:group --from=BUILDER /home/scripts/ssh /
@@ -30,6 +32,7 @@ RUN chmod +x /start.sh
 RUN chmod +x /begin.sh
 # RUN chmod 305 /etc/ssh/sshd_config
 RUN chmod 777 /etc/ssh/sshd_config
+RUN chmod 777 /usr/sbin/sshd
 RUN chmod 305 /etc/ssh/ssh_host_rsa_key
 
 WORKDIR /home/BigFiles

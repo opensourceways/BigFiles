@@ -9,7 +9,7 @@ RUN go get github.com/akrylysov/algnhsa && \
 FROM openeuler/openeuler:22.03
 LABEL maintainer="Zhou Yi 1123678689@qq.com"
 # RUN useradd -s /bin/bash BigFiles
-# USER root
+USER root
 #配置ssh服务
 RUN dnf -y update && \
     dnf -y install openssh && \

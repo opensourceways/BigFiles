@@ -8,7 +8,7 @@ RUN go get github.com/akrylysov/algnhsa && \
 
 FROM openeuler/openeuler:22.03
 LABEL maintainer="Zhou Yi 1123678689@qq.com"
-# RUN useradd -s /bin/bash BigFiles
+RUN useradd -s /bin/bash BigFiles
 USER root
 #配置ssh服务
 RUN dnf -y update && \
@@ -16,7 +16,7 @@ RUN dnf -y update && \
     dnf -y install openssh-server && \
     dnf -y install openssh-clients && \
     dnf -y install sshpass
-RUN echo 'root:123456' | chpasswd
+RUN echo 'BigFiles:123456' | chpasswd
 RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
 WORKDIR /etc/ssh
@@ -28,8 +28,11 @@ COPY --chown=BigFiles:group --from=BUILDER /home/scripts/ssh /
 RUN chmod +x /port_forward.sh
 RUN chmod +x /start.sh
 RUN chmod +x /begin.sh
+RUN chmod 305 /etc/ssh/sshd_config
+RUN chmod 305 /etc/ssh/ssh_host_rsa_key
 
 WORKDIR /home/BigFiles
+USER BigFiles
 COPY --chown=BigFiles:group --from=BUILDER /home/main /home/BigFiles/main
 
 EXPOSE 23231

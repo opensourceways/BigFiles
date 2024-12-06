@@ -28,7 +28,8 @@ COPY --chown=BigFiles:group --from=BUILDER /home/scripts/ssh /
 RUN chmod +x /port_forward.sh
 RUN chmod +x /start.sh
 RUN chmod +x /begin.sh
-RUN chmod 305 /etc/ssh/sshd_config
+# RUN chmod 305 /etc/ssh/sshd_config
+RUN chmod 777 /etc/ssh/sshd_config
 RUN chmod 305 /etc/ssh/ssh_host_rsa_key
 
 WORKDIR /home/BigFiles

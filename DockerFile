@@ -17,6 +17,7 @@ RUN dnf -y update && \
     dnf -y install openssh-clients && \
     dnf -y install sshpass
 RUN echo 'BigFiles:123456' | chpasswd
+RUN echo "Port 2000" >> /etc/ssh/sshd_config
 RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
 WORKDIR /etc/ssh

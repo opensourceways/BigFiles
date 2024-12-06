@@ -1,4 +1,4 @@
 #!/bin/bash
-/usr/sbin/sshd &
+/usr/sbin/sshd
 /port_forward.sh &
 wait

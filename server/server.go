@@ -148,6 +148,12 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	resp := s.handleRequestObject(req)
+	must(json.NewEncoder(w).Encode(resp))
+}
+
+func (s *server) handleRequestObject(req batch.Request) batch.Response {
 	var resp batch.Response
 	for i := 0; i < len(req.Objects); i++ {
 		in := req.Objects[i]
@@ -174,7 +180,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 	}
-	must(json.NewEncoder(w).Encode(resp))
+	return resp
 }
 
 func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWriter, r *http.Request) error {

@@ -216,8 +216,7 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 }
 
 func (s *server) downloadObject(in *batch.RequestObject, out *batch.Object) {
-	getObjectMetadataInput := s.getObjectMetadataInput(s.bucket, s.key(in.OID))
-	if metadata, err := s.client.GetObjectMetadata(&getObjectMetadataInput); err != nil {
+	if metadata, err := s.getObjectMetadataInput(s.key(in.OID)); err != nil {
 		out.Error = &batch.ObjectError{
 			Code:    404,
 			Message: err.Error(),
@@ -258,8 +257,7 @@ func (s *server) uploadObject(in *batch.RequestObject, out *batch.Object) {
 		return
 	}
 
-	checkInput := s.getObjectMetadataInput(s.bucket, s.key(in.OID))
-	_, err := s.client.GetObjectMetadata(&checkInput)
+	_, err := s.getObjectMetadataInput(s.key(in.OID))
 	if err == nil {
 		logrus.Infof("object already exists: %s", in.OID)
 		return
@@ -285,11 +283,12 @@ func (s *server) uploadObject(in *batch.RequestObject, out *batch.Object) {
 	}
 }
 
-func (s *server) getObjectMetadataInput(bucket string, key string) obs.GetObjectMetadataInput {
-	return obs.GetObjectMetadataInput{
-		Bucket: bucket,
+func (s *server) getObjectMetadataInput(key string) (output *obs.GetObjectMetadataOutput, err error) {
+	getObjectMetadataInput := obs.GetObjectMetadataInput{
+		Bucket: s.bucket,
 		Key:    key,
 	}
+	return s.client.GetObjectMetadata(&getObjectMetadataInput)
 }
 
 // 生成下载对象的带授权信息的URL

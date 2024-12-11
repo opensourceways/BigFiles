@@ -1,13 +1,17 @@
 package server
 
 import (
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
 	"github.com/metalogical/BigFiles/auth"
 	"github.com/metalogical/BigFiles/batch"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"regexp"
 	"testing"
 	"time"
 )
@@ -235,6 +239,14 @@ func Test_server_dealWithAuthError(t *testing.T) {
 		w          http.ResponseWriter
 		r          *http.Request
 	}
+	validatecfg.passwordRegexp, _ = regexp.Compile("^[a-zA-Z0-9!@_#$%^&*()\\-=+,?.,]*$")
+	validatecfg.usernameRegexp, _ = regexp.Compile("^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$")
+	username := "user"
+	password := "wrong_pwd"
+	authString := fmt.Sprintf("%s:%s", username, password)
+	encodedAuth := base64.StdEncoding.EncodeToString([]byte(authString))
+	req := httptest.NewRequest(http.MethodGet, "/owner/repo/objects/batch", nil)
+	req.Header.Set("Authorization", "Basic "+encodedAuth)
 	tests := []struct {
 		name    string
 		fields  ServerInfo
@@ -242,6 +254,32 @@ func Test_server_dealWithAuthError(t *testing.T) {
 		wantErr bool
 	}{
 		// TODO: Add test cases.
+		{
+			name:   "deal with auth without username and password",
+			fields: serverInfo,
+			args: args{
+				r: httptest.NewRequest(http.MethodGet, "/owner/repo/objects/batch", nil),
+			},
+			wantErr: true,
+		},
+		{
+			name:   "deal with auth with username and password failed",
+			fields: serverInfo,
+			args: args{
+				r: req,
+			},
+			wantErr: true,
+		},
+		{
+			name: "deal with auth with username and password success",
+			fields: ServerInfo{
+				isAuthorized: func(auth.UserInRepo) error { return nil },
+			},
+			args: args{
+				r: req,
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -253,6 +291,8 @@ func Test_server_dealWithAuthError(t *testing.T) {
 				cdnDomain:    tt.fields.cdnDomain,
 				isAuthorized: tt.fields.isAuthorized,
 			}
+			w := httptest.NewRecorder()
+			tt.args.w = w
 			if err := s.dealWithAuthError(tt.args.userInRepo, tt.args.w, tt.args.r); (err != nil) != tt.wantErr {
 				t.Errorf("dealWithAuthError() error = %v, wantErr %v", err, tt.wantErr)
 			}

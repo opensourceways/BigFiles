@@ -9,6 +9,7 @@ import (
 	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
 	"github.com/metalogical/BigFiles/auth"
 	"github.com/metalogical/BigFiles/batch"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -572,7 +573,14 @@ func Test_server_key(t *testing.T) {
 		args   args
 		want   string
 	}{
-		// TODO: Add test cases.
+		{
+			name:   "server key test success",
+			fields: serverInfo,
+			args: args{
+				oid: "123456789",
+			},
+			want: "Prefix123456789",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -596,12 +604,36 @@ func Test_server_uploadObject(t *testing.T) {
 		in  *batch.RequestObject
 		out *batch.Object
 	}
+	outWithLarge := batch.Object{
+		OID:  "123456789",
+		Size: 5 * int(math.Pow10(9)),
+	}
+	outObject := batch.Object{
+		OID:  "123456789",
+		Size: 1000,
+	}
 	tests := []struct {
-		name   string
-		fields ServerInfo
-		args   args
+		name    string
+		fields  ServerInfo
+		args    args
+		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name:   "server uploadObject size large than limit",
+			fields: serverInfo,
+			args: args{
+				out: &outWithLarge,
+			},
+			wantErr: false,
+		},
+		{
+			name:   "server upload size smaller than limit",
+			fields: serverInfo,
+			args: args{
+				out: &outObject,
+			},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -613,6 +645,7 @@ func Test_server_uploadObject(t *testing.T) {
 				cdnDomain:    tt.fields.cdnDomain,
 				isAuthorized: tt.fields.isAuthorized,
 			}
+			defer panicCheck(t, tt.wantErr)
 			s.uploadObject(tt.args.in, tt.args.out)
 		})
 	}

@@ -75,97 +75,63 @@ func TestNew(t *testing.T) {
 }
 
 func TestOptions_imputeFromEnv(t *testing.T) {
-	type fields struct {
-		Endpoint        string
-		NoSSL           bool
-		Bucket          string
-		CdnDomain       string
-		S3Accelerate    bool
-		AccessKeyID     string
-		SecretAccessKey string
-		SessionToken    string
-		TTL             time.Duration
-		Prefix          string
-		IsAuthorized    func(auth.UserInRepo) error
+	optionsImputeFromEnvSuccess := Options{
+		Endpoint:        "Endpoint",
+		AccessKeyID:     "AccessKeyId",
+		SecretAccessKey: "SecretAccessKey",
+		SessionToken:    "SessionToken",
+		Bucket:          "Bucket",
+		TTL:             time.Hour,
+	}
+	optionsWithEmptyEndpoint := Options{
+		AccessKeyID:     "AccessKeyId",
+		SecretAccessKey: "SecretAccessKey",
+		SessionToken:    "SessionToken",
+		Bucket:          "Bucket",
+		TTL:             time.Hour,
+	}
+	optionsWithEmptyObsAk := Options{
+		Endpoint:        "Endpoint",
+		SecretAccessKey: "SecretAccessKey",
+		SessionToken:    "SessionToken",
+		Bucket:          "Bucket",
+		TTL:             time.Hour,
+	}
+	optionsWithEmptyBucket := Options{
+		Endpoint:        "Endpoint",
+		AccessKeyID:     "AccessKeyId",
+		SecretAccessKey: "SecretAccessKey",
+		SessionToken:    "SessionToken",
+		TTL:             time.Hour,
 	}
 	tests := []struct {
 		name    string
-		fields  fields
+		fields  Options
 		want    Options
 		wantErr bool
 	}{
 		{
-			name: "Test Options imputeFromEnv Success",
-			fields: fields{
-				Endpoint:        "Endpoint",
-				AccessKeyID:     "AccessKeyId",
-				SecretAccessKey: "SecretAccessKey",
-				SessionToken:    "SessionToken",
-				Bucket:          "Bucket",
-				TTL:             time.Hour,
-			},
-			want: Options{
-				Endpoint:        "Endpoint",
-				AccessKeyID:     "AccessKeyId",
-				SecretAccessKey: "SecretAccessKey",
-				SessionToken:    "SessionToken",
-				Bucket:          "Bucket",
-				TTL:             time.Hour,
-			},
+			name:    "Test Options imputeFromEnv Success",
+			fields:  optionsImputeFromEnvSuccess,
+			want:    optionsImputeFromEnvSuccess,
 			wantErr: false,
 		},
 		{
-			name: "Test Options endpoint Empty",
-			fields: fields{
-				AccessKeyID:     "AccessKeyId",
-				SecretAccessKey: "SecretAccessKey",
-				SessionToken:    "SessionToken",
-				Bucket:          "Bucket",
-				TTL:             time.Hour,
-			},
-			want: Options{
-				AccessKeyID:     "AccessKeyId",
-				SecretAccessKey: "SecretAccessKey",
-				SessionToken:    "SessionToken",
-				Bucket:          "Bucket",
-				TTL:             time.Hour,
-			},
+			name:    "Test Options endpoint Empty",
+			fields:  optionsWithEmptyEndpoint,
+			want:    optionsWithEmptyEndpoint,
 			wantErr: true,
 		},
 		{
-			name: "Test Options OBS_ACCESS_KEY_ID Empty",
-			fields: fields{
-				Endpoint:        "Endpoint",
-				SecretAccessKey: "SecretAccessKey",
-				SessionToken:    "SessionToken",
-				Bucket:          "Bucket",
-				TTL:             time.Hour,
-			},
-			want: Options{
-				Endpoint:        "Endpoint",
-				SecretAccessKey: "SecretAccessKey",
-				SessionToken:    "SessionToken",
-				Bucket:          "Bucket",
-				TTL:             time.Hour,
-			},
+			name:    "Test Options OBS_ACCESS_KEY_ID Empty",
+			fields:  optionsWithEmptyObsAk,
+			want:    optionsWithEmptyObsAk,
 			wantErr: true,
 		},
 		{
-			name: "Test Options Bucket Empty",
-			fields: fields{
-				Endpoint:        "Endpoint",
-				AccessKeyID:     "AccessKeyId",
-				SecretAccessKey: "SecretAccessKey",
-				SessionToken:    "SessionToken",
-				TTL:             time.Hour,
-			},
-			want: Options{
-				Endpoint:        "Endpoint",
-				AccessKeyID:     "AccessKeyId",
-				SecretAccessKey: "SecretAccessKey",
-				SessionToken:    "SessionToken",
-				TTL:             time.Hour,
-			},
+			name:    "Test Options Bucket Empty",
+			fields:  optionsWithEmptyBucket,
+			want:    optionsWithEmptyBucket,
 			wantErr: true,
 		},
 	}
@@ -220,23 +186,7 @@ func Test_must(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				if r := recover(); r != nil {
-					// 如果捕获到了panic，检查错误信息是否符合预期
-					err, ok := r.(error)
-					if ok && tt.wantErr {
-						if err.Error() == tt.args.err.Error() {
-							return
-						}
-					}
-					t.Errorf(unexpectedPanic)
-				} else if tt.wantErr {
-					t.Errorf(expectedPanic)
-				} else {
-					return
-				}
-
-			}()
+			defer panicCheck(t, tt.wantErr)
 			must(tt.args.err)
 		})
 	}

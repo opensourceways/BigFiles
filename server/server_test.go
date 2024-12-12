@@ -268,7 +268,7 @@ func Test_server_dealWithAuthError(t *testing.T) {
 	validatecfg.passwordRegexp, _ = regexp.Compile(`^[a-zA-Z0-9!@_#$%^&*()-=+,?.,]*$`)
 	validatecfg.usernameRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
 	username := "user"
-	password := "wrong_pwd"
+	password := ""
 	authString := fmt.Sprintf("%s:%s", username, password)
 	encodedAuth := base64.StdEncoding.EncodeToString([]byte(authString))
 	req := httptest.NewRequest(http.MethodGet, batchUrlPath, nil)

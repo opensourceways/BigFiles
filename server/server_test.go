@@ -36,9 +36,11 @@ var serverInfo = ServerInfo{
 	isAuthorized: auth.GiteeAuth(),
 }
 
-const unexpectedPanic = "unexpected panic value or wantErr mismatch"
-const expectedPanic = "expected panic but none occurred"
-const batchUrlPath = "/owner/repo/objects/batch"
+const (
+	batchUrlPath    = "/owner/repo/objects/batch"
+	expectedPanic   = "expected panic but none occurred"
+	unexpectedPanic = "unexpected panic value or wantErr mismatch"
+)
 
 func TestNew(t *testing.T) {
 	type args struct {

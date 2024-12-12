@@ -200,10 +200,10 @@ func panicCheck(t *testing.T, wantErr bool) {
 		if ok && wantErr {
 			return
 		} else {
-			t.Errorf(unexpectedPanic)
+			t.Error(unexpectedPanic)
 		}
 	} else if wantErr {
-		t.Errorf(expectedPanic)
+		t.Error(expectedPanic)
 	} else {
 		return
 	}

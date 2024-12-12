@@ -241,8 +241,8 @@ func Test_server_dealWithAuthError(t *testing.T) {
 		w          http.ResponseWriter
 		r          *http.Request
 	}
-	validatecfg.passwordRegexp, _ = regexp.Compile("^[a-zA-Z0-9!@_#$%^&*()\\-=+,?.,]*$")
-	validatecfg.usernameRegexp, _ = regexp.Compile("^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$")
+	validatecfg.passwordRegexp, _ = regexp.Compile(`^[a-zA-Z0-9!@_#$%^&*()-=+,?.,]*$`)
+	validatecfg.usernameRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
 	username := "user"
 	password := "wrong_pwd"
 	authString := fmt.Sprintf("%s:%s", username, password)
@@ -487,8 +487,8 @@ func Test_server_handleBatch(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
 	ctx.URLParams.Add("owner", owner)
 	ctx.URLParams.Add("repo", repo)
-	validatecfg.ownerRegexp, _ = regexp.Compile("^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$")
-	validatecfg.reponameRegexp, _ = regexp.Compile("^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$")
+	validatecfg.ownerRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
+	validatecfg.reponameRegexp, _ = regexp.Compile(`^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`)
 	tests := []struct {
 		name    string
 		fields  ServerInfo

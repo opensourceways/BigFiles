@@ -35,6 +35,10 @@ var serverInfo = ServerInfo{
 	isAuthorized: auth.GiteeAuth(),
 }
 
+const unexpectedPanic = "unexpected panic value or wantErr mismatch"
+const expectedPanic = "expected panic but none occurred"
+const batchUrlPath = "/owner/repo/objects/batch"
+
 func TestNew(t *testing.T) {
 	type args struct {
 		o Options
@@ -225,14 +229,34 @@ func Test_must(t *testing.T) {
 							return
 						}
 					}
-					t.Errorf("unexpected panic value or wantErr mismatch")
+					t.Errorf(unexpectedPanic)
 				} else if tt.wantErr {
-					t.Errorf("expected panic but none occurred")
+					t.Errorf(expectedPanic)
+				} else {
+					return
 				}
+
 			}()
 			must(tt.args.err)
 		})
 	}
+}
+
+func panicCheck(t *testing.T, wantErr bool) {
+	if r := recover(); r != nil {
+		// 如果捕获到了panic，检查错误信息是否符合预期
+		_, ok := r.(error)
+		if ok && wantErr {
+			return
+		} else {
+			t.Errorf(unexpectedPanic)
+		}
+	} else if wantErr {
+		t.Errorf(expectedPanic)
+	} else {
+		return
+	}
+
 }
 
 func Test_server_dealWithAuthError(t *testing.T) {
@@ -247,7 +271,7 @@ func Test_server_dealWithAuthError(t *testing.T) {
 	password := "wrong_pwd"
 	authString := fmt.Sprintf("%s:%s", username, password)
 	encodedAuth := base64.StdEncoding.EncodeToString([]byte(authString))
-	req := httptest.NewRequest(http.MethodGet, "/owner/repo/objects/batch", nil)
+	req := httptest.NewRequest(http.MethodGet, batchUrlPath, nil)
 	req.Header.Set("Authorization", "Basic "+encodedAuth)
 	tests := []struct {
 		name    string
@@ -259,7 +283,7 @@ func Test_server_dealWithAuthError(t *testing.T) {
 			name:   "deal with auth without username and password",
 			fields: serverInfo,
 			args: args{
-				r: httptest.NewRequest(http.MethodGet, "/owner/repo/objects/batch", nil),
+				r: httptest.NewRequest(http.MethodGet, batchUrlPath, nil),
 			},
 			wantErr: true,
 		},
@@ -338,19 +362,7 @@ func Test_server_downloadObject(t *testing.T) {
 				cdnDomain:    tt.fields.cdnDomain,
 				isAuthorized: tt.fields.isAuthorized,
 			}
-			defer func() {
-				if r := recover(); r != nil {
-					// 如果捕获到了panic，检查错误信息是否符合预期
-					_, ok := r.(error)
-					if ok && tt.wantErr {
-						return
-					} else {
-						t.Errorf("unexpected panic value or wantErr mismatch")
-					}
-				} else if tt.wantErr {
-					t.Errorf("expected panic but none occurred")
-				}
-			}()
+			defer panicCheck(t, tt.wantErr)
 			s.downloadObject(tt.args.in, tt.args.out)
 		})
 	}
@@ -360,24 +372,24 @@ func Test_server_generateDownloadUrl(t *testing.T) {
 	type args struct {
 		getObjectInput *obs.CreateSignedUrlInput
 	}
+	inputObject := &obs.CreateSignedUrlInput{
+		Method:  obs.HttpMethodGet,
+		Bucket:  serverInfo.bucket,
+		Key:     "123456789",
+		Expires: int(serverInfo.ttl / time.Second),
+		Headers: map[string]string{contentType: "application/octet-stream"},
+	}
 	tests := []struct {
 		name    string
 		fields  ServerInfo
 		args    args
 		wantErr bool
 	}{
-		// TODO: Add test cases.
 		{
 			name:   "generate download url",
 			fields: serverInfo,
 			args: args{
-				getObjectInput: &obs.CreateSignedUrlInput{
-					Method:  obs.HttpMethodGet,
-					Bucket:  serverInfo.bucket,
-					Key:     "123456789",
-					Expires: int(serverInfo.ttl / time.Second),
-					Headers: map[string]string{contentType: "application/octet-stream"},
-				},
+				getObjectInput: inputObject,
 			},
 			wantErr: true,
 		},
@@ -392,19 +404,7 @@ func Test_server_generateDownloadUrl(t *testing.T) {
 				cdnDomain:    tt.fields.cdnDomain,
 				isAuthorized: tt.fields.isAuthorized,
 			}
-			defer func() {
-				if r := recover(); r != nil {
-					// 如果捕获到了panic，检查错误信息是否符合预期
-					_, ok := r.(error)
-					if ok && tt.wantErr {
-						return
-					} else {
-						t.Errorf("unexpected panic value or wantErr mismatch")
-					}
-				} else if tt.wantErr {
-					t.Errorf("expected panic but none occurred")
-				}
-			}()
+			defer panicCheck(t, tt.wantErr)
 			if got := s.generateDownloadUrl(tt.args.getObjectInput); got != nil {
 				t.Errorf("generateDownloadUrl() = %v", got)
 			}
@@ -441,19 +441,7 @@ func Test_server_getObjectMetadataInput(t *testing.T) {
 				cdnDomain:    tt.fields.cdnDomain,
 				isAuthorized: tt.fields.isAuthorized,
 			}
-			defer func() {
-				if r := recover(); r != nil {
-					// 如果捕获到了panic，检查错误信息是否符合预期
-					_, ok := r.(error)
-					if ok && tt.wantErr {
-						return
-					} else {
-						t.Errorf("unexpected panic value or wantErr mismatch")
-					}
-				} else if tt.wantErr {
-					t.Errorf("expected panic but none occurred")
-				}
-			}()
+			defer panicCheck(t, tt.wantErr)
 			_, err := s.getObjectMetadataInput(tt.args.key)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getObjectMetadataInput() error = %v, wantErr %v", err, tt.wantErr)
@@ -499,7 +487,7 @@ func Test_server_handleBatch(t *testing.T) {
 			name:   "server handleBatch success with nil requestBody",
 			fields: serverInfo,
 			args: args{
-				r: httptest.NewRequest(http.MethodGet, "/owner/repo/objects/batch", nil),
+				r: httptest.NewRequest(http.MethodGet, batchUrlPath, nil),
 			},
 			wantErr: false,
 		},
@@ -524,19 +512,7 @@ func Test_server_handleBatch(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 			tt.args.w = w
-			defer func() {
-				if r := recover(); r != nil {
-					// 如果捕获到了panic，检查错误信息是否符合预期
-					_, ok := r.(error)
-					if ok && tt.wantErr {
-						return
-					} else {
-						t.Errorf("unexpected panic value or wantErr mismatch")
-					}
-				} else if tt.wantErr {
-					t.Errorf("expected panic but none occurred")
-				}
-			}()
+			defer panicCheck(t, tt.wantErr)
 			s.handleBatch(tt.args.w, tt.args.r)
 		})
 	}
@@ -552,7 +528,33 @@ func Test_server_handleRequestObject(t *testing.T) {
 		args   args
 		want   batch.Response
 	}{
-		// TODO: Add test cases.
+		{
+			name:   "server handleRequestObject",
+			fields: serverInfo,
+			args: args{
+				req: batch.Request{
+					Operation: "download",
+					Objects: []batch.RequestObject{
+						{
+							OID:  "123456789",
+							Size: 1000,
+						},
+					},
+				},
+			},
+			want: batch.Response{
+				Objects: []batch.Object{
+					{
+						OID:  "123456789",
+						Size: 1000,
+						Error: &batch.ObjectError{
+							Code:    422,
+							Message: "oid must be a SHA-256 hash in lower case hexadecimal",
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -576,12 +578,21 @@ func Test_server_healthCheck(t *testing.T) {
 		w http.ResponseWriter
 		r *http.Request
 	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	tests := []struct {
-		name   string
-		fields ServerInfo
-		args   args
+		name    string
+		fields  ServerInfo
+		args    args
+		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name:   "server healthCheck success",
+			fields: serverInfo,
+			args: args{
+				r: req,
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -593,6 +604,9 @@ func Test_server_healthCheck(t *testing.T) {
 				cdnDomain:    tt.fields.cdnDomain,
 				isAuthorized: tt.fields.isAuthorized,
 			}
+			w := httptest.NewRecorder()
+			tt.args.w = w
+			defer panicCheck(t, tt.wantErr)
 			s.healthCheck(tt.args.w, tt.args.r)
 		})
 	}

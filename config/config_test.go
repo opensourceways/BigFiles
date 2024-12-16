@@ -25,7 +25,7 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "TestLoadConfig fail",
 			args: args{
-				path:   "../config.yml.example",
+				path:   "../missing_config.yml",
 				cfg:    &Config{},
 				remove: false,
 			},
@@ -34,7 +34,7 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "TestLoadConfig fail and remove LocalFile",
 			args: args{
-				path:   "../config.yml.example",
+				path:   "../missing_config.yml",
 				cfg:    &Config{},
 				remove: true,
 			},

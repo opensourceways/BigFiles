@@ -42,7 +42,7 @@ func TestLoadFromYaml(t *testing.T) {
 		{
 			name: "TestLoadFromYaml fail",
 			args: args{
-				path: "../config.yml.example",
+				path: "../missing_config.yml",
 			},
 			wantErr: true,
 		},

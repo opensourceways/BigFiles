@@ -5,6 +5,7 @@ go 1.21
 toolchain go1.21.4
 
 require (
+	bou.ke/monkey v1.0.2
 	github.com/go-chi/chi v4.1.2+incompatible
 	sigs.k8s.io/yaml v1.4.0
 )

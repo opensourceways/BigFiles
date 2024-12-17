@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bou.ke/monkey"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
@@ -284,13 +286,16 @@ func Test_server_downloadObject(t *testing.T) {
 		out *batch.Object
 	}
 	tests := []struct {
-		name    string
-		fields  ServerInfo
-		args    args
-		wantErr bool
+		name          string
+		fields        ServerInfo
+		args          args
+		wantErr       bool
+		mockMetaData  bool
+		mockMetaSize  bool
+		wantErrorCode int
 	}{
 		{
-			name:   "download object failed",
+			name:   "download object success",
 			fields: serverInfo,
 			args: args{
 				in: &batch.RequestObject{
@@ -302,11 +307,79 @@ func Test_server_downloadObject(t *testing.T) {
 					Size: 100,
 				},
 			},
-			wantErr: true,
+			wantErr:      false,
+			mockMetaData: true,
+			mockMetaSize: true,
+		},
+		{
+			name:   "download getObjectMetadataInput failed",
+			fields: serverInfo,
+			args: args{
+				in: &batch.RequestObject{
+					OID:  "123456789",
+					Size: 100,
+				},
+				out: &batch.Object{
+					OID:  "123456789",
+					Size: 100,
+				},
+			},
+			wantErr:       false,
+			mockMetaData:  false,
+			mockMetaSize:  true,
+			wantErrorCode: 404,
+		},
+		{
+			name:   "download getObjectMetadataInput size error",
+			fields: serverInfo,
+			args: args{
+				in: &batch.RequestObject{
+					OID:  "123456789",
+					Size: 100,
+				},
+				out: &batch.Object{
+					OID:  "123456789",
+					Size: 100,
+				},
+			},
+			wantErr:       false,
+			mockMetaData:  false,
+			mockMetaSize:  false,
+			wantErrorCode: 422,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			o := obs.GetObjectMetadataOutput{
+				ContentLength: int64(tt.args.in.Size),
+			}
+			getObjectMetadataInputPtr := reflect.ValueOf((*server).getObjectMetadataInput)
+			if tt.mockMetaData {
+				monkey.Patch(getObjectMetadataInputPtr.Interface(),
+					func(s *server, key string) (output *obs.GetObjectMetadataOutput, err error) {
+						return &o, nil
+					})
+			} else if tt.mockMetaSize {
+				monkey.Patch(getObjectMetadataInputPtr.Interface(),
+					func(s *server, key string) (output *obs.GetObjectMetadataOutput, err error) {
+						return &o, errors.New("get Metadata error")
+					})
+			} else {
+				monkey.Patch(getObjectMetadataInputPtr.Interface(),
+					func(s *server, key string) (output *obs.GetObjectMetadataOutput, err error) {
+						o.ContentLength = int64(101)
+						return &o, nil
+					})
+			}
+
+			defer monkey.Unpatch(getObjectMetadataInputPtr.Interface())
+			downloadUrl, _ := url.Parse("test.url")
+			generateDownloadUrlPtr := reflect.ValueOf((*server).generateDownloadUrl)
+			monkey.Patch(generateDownloadUrlPtr.Interface(),
+				func(s *server, getObjectInput *obs.CreateSignedUrlInput) *url.URL {
+					return downloadUrl
+				})
+			defer monkey.Unpatch(generateDownloadUrlPtr.Interface())
 			s := &server{
 				ttl:          tt.fields.ttl,
 				client:       tt.fields.client,
@@ -317,6 +390,9 @@ func Test_server_downloadObject(t *testing.T) {
 			}
 			defer panicCheck(t, tt.wantErr)
 			s.downloadObject(tt.args.in, tt.args.out)
+			if tt.args.out.Error != nil && tt.args.out.Error.Code != tt.wantErrorCode {
+				t.Errorf("download failed with unexpected code = %v", tt.args.out.Error.Code)
+			}
 		})
 	}
 }
@@ -431,10 +507,11 @@ func Test_server_handleBatch(t *testing.T) {
 	validatecfg.ownerRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
 	validatecfg.reponameRegexp, _ = regexp.Compile(`^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`)
 	tests := []struct {
-		name    string
-		fields  ServerInfo
-		args    args
-		wantErr bool
+		name                  string
+		args                  args
+		wantErr               bool
+		fields                ServerInfo
+		wantDealWithAuthError bool
 	}{
 		{
 			name:   "server handleBatch success with nil requestBody",
@@ -442,7 +519,8 @@ func Test_server_handleBatch(t *testing.T) {
 			args: args{
 				r: httptest.NewRequest(http.MethodGet, batchUrlPath, nil),
 			},
-			wantErr: false,
+			wantErr:               false,
+			wantDealWithAuthError: false,
 		},
 		{
 			name:   "server handleBatch success",
@@ -450,11 +528,29 @@ func Test_server_handleBatch(t *testing.T) {
 			args: args{
 				r: req,
 			},
-			wantErr: false,
+			wantErr:               false,
+			wantDealWithAuthError: false,
+		},
+		{
+			name:   "server handleBatch dealWithAuthError success",
+			fields: serverInfo,
+			args: args{
+				r: req,
+			},
+			wantErr:               false,
+			wantDealWithAuthError: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.wantDealWithAuthError {
+				dealWithAuthErrorPtr := reflect.ValueOf((*server).dealWithAuthError)
+				monkey.Patch(dealWithAuthErrorPtr.Interface(),
+					func(s *server, userInRepo auth.UserInRepo, w http.ResponseWriter, r *http.Request) error {
+						return nil
+					})
+				defer monkey.Unpatch(dealWithAuthErrorPtr.Interface())
+			}
 			s := &server{
 				ttl:          tt.fields.ttl,
 				client:       tt.fields.client,
@@ -614,11 +710,15 @@ func Test_server_uploadObject(t *testing.T) {
 		OID:  "123456789",
 		Size: 1000,
 	}
+	inObject := batch.RequestObject{
+		OID: "123456789",
+	}
 	tests := []struct {
-		name    string
-		fields  ServerInfo
-		args    args
-		wantErr bool
+		name        string
+		args        args
+		wantErr     bool
+		fields      ServerInfo
+		wantGetMeta bool
 	}{
 		{
 			name:   "server uploadObject size large than limit",
@@ -636,9 +736,42 @@ func Test_server_uploadObject(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name:   "server upload get metadata success",
+			fields: serverInfo,
+			args: args{
+				in:  &inObject,
+				out: &outObject,
+			},
+			wantErr:     false,
+			wantGetMeta: true,
+		},
+		{
+			name:   "server upload get metadata success",
+			fields: serverInfo,
+			args: args{
+				in:  &inObject,
+				out: &outObject,
+			},
+			wantErr:     true,
+			wantGetMeta: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			getObjectMetadataInputPtr := reflect.ValueOf((*server).getObjectMetadataInput)
+			if tt.wantGetMeta {
+				monkey.Patch(getObjectMetadataInputPtr.Interface(),
+					func(s *server, key string) (output *obs.GetObjectMetadataOutput, err error) {
+						return &obs.GetObjectMetadataOutput{}, nil
+					})
+			} else {
+				monkey.Patch(getObjectMetadataInputPtr.Interface(),
+					func(s *server, key string) (output *obs.GetObjectMetadataOutput, err error) {
+						return &obs.GetObjectMetadataOutput{}, errors.New("get meta data error")
+					})
+			}
+			defer monkey.Unpatch(getObjectMetadataInputPtr.Interface())
 			s := &server{
 				ttl:          tt.fields.ttl,
 				client:       tt.fields.client,

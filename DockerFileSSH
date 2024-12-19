@@ -1,0 +1,10 @@
+FROM nginx:latest
+
+RUN mkdir -p /etc/nginx/tcp.d
+
+# 使用 echo 命令添加 git_ssh.conf 文件并写入指定配置内容
+COPY ./git_ssh.conf /etc/nginx/tcp.d
+RUN sed -i '$a include /etc/nginx/tcp.d/*.conf;' /etc/nginx/nginx.conf
+
+EXPOSE 22
+CMD ["nginx", "-g", "daemon off;"]

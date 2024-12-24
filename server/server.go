@@ -198,6 +198,8 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 			return errors.New("invalid username or password format")
 		}
 		err = s.isAuthorized(userInRepo)
+	} else if authToken := r.Header.Get("Authorization"); authToken != "" {
+		err = auth.VerifySSHAuthToken(authToken, userInRepo)
 	} else {
 		err = errors.New("unauthorized: cannot get password")
 	}

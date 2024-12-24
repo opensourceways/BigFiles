@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/metalogical/BigFiles/batch"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,10 +27,14 @@ var (
 	downloadPermissions = []string{"admin", "developer", "read"}
 )
 
-const contentType = "Content-Type"
+const accept = "Accept"
 const verifyLog = "verifyUser"
-const appendPathAccessToken = "?access_token="
+const userAgent = "User-Agent"
+const contentType = "Content-Type"
+const authorization = "Authorization"
+const acceptEncoding = "Accept-Encoding"
 const formatLogString = "%s | %s"
+const appendPathAccessToken = "?access_token="
 
 type giteeUser struct {
 	Permission string `json:"permission"`
@@ -216,6 +223,54 @@ func verifyUserDownload(giteeUser *giteeUser, userInRepo UserInRepo) error {
 		}
 	}
 	msg := fmt.Sprintf("forbidden: user %s has no permission to download", userInRepo.Username)
+	logrus.Error(fmt.Sprintf(formatLogString, verifyLog, msg))
+	return errors.New(msg)
+}
+
+func VerifySSHAuthToken(auth string, userInRepo UserInRepo) error {
+	batchCheckRequest := batch.Request{
+		Operation: "upload",
+		Transfers: []string{
+			"lfs-standalone-file",
+			"basic",
+			"ssh",
+		},
+		Ref: struct {
+			Name string `json:"name"`
+		}{
+			Name: "refs/heads/master",
+		},
+		Objects: []batch.RequestObject{
+			{
+				OID:  "1234567890",
+				Size: 100,
+			},
+		},
+	}
+	jsonData, err := json.Marshal(batchCheckRequest)
+	if err != nil {
+		msg := ": json marshal failed"
+		return generateError(err, msg)
+	}
+	bodyReader := bytes.NewReader(jsonData)
+	path := fmt.Sprintf("https://gitee.com/%v/%v.git/info/lfs/objects/batch", userInRepo.Owner, userInRepo.Repo)
+	headers := http.Header{
+		accept:         []string{"application/vnd.git-lfs+json"},
+		userAgent:      []string{"git-lfs/3.5.1 (GitHub; linux amd64; go 1.21.8)"},
+		contentType:    []string{"application/vnd.git-lfs+json; charset=utf-8"},
+		authorization:  []string{auth},
+		acceptEncoding: []string{"gzip"},
+	}
+	err = getParsedResponse("POST", path, headers, bodyReader, nil)
+	if err != nil {
+		msg := ": verify user ssh token failed"
+		return generateError(err, msg)
+	}
+	return nil
+}
+
+func generateError(err error, m string) error {
+	msg := err.Error() + m
 	logrus.Error(fmt.Sprintf(formatLogString, verifyLog, msg))
 	return errors.New(msg)
 }

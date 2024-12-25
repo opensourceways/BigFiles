@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"github.com/metalogical/BigFiles/config"
 	"testing"
 
@@ -97,4 +98,34 @@ func (s *SuiteGitee) TestVerifyUser() {
 
 func TestGitee(t *testing.T) {
 	suite.Run(t, new(SuiteGitee))
+}
+
+func TestVerifySSHAuthToken(t *testing.T) {
+	type args struct {
+		auth       string
+		userInRepo UserInRepo
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr assert.ErrorAssertionFunc
+	}{
+		{
+			name: "verify ssh auth token failed",
+			args: args{
+				auth: "",
+				userInRepo: UserInRepo{
+					Repo:  "repo",
+					Owner: "owner",
+				},
+			},
+			wantErr: assert.Error,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.wantErr(t, VerifySSHAuthToken(tt.args.auth, tt.args.userInRepo),
+				fmt.Sprintf("VerifySSHAuthToken(%v, %v)", tt.args.auth, tt.args.userInRepo))
+		})
+	}
 }

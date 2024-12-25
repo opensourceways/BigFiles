@@ -27,14 +27,16 @@ var (
 	downloadPermissions = []string{"admin", "developer", "read"}
 )
 
-const accept = "Accept"
-const verifyLog = "verifyUser"
-const userAgent = "User-Agent"
-const contentType = "Content-Type"
-const authorization = "Authorization"
-const acceptEncoding = "Accept-Encoding"
-const formatLogString = "%s | %s"
-const appendPathAccessToken = "?access_token="
+const (
+	accept                = "Accept"
+	verifyLog             = "verifyUser"
+	userAgent             = "User-Agent"
+	contentType           = "Content-Type"
+	authorization         = "Authorization"
+	acceptEncoding        = "Accept-Encoding"
+	formatLogString       = "%s | %s"
+	appendPathAccessToken = "?access_token="
+)
 
 type giteeUser struct {
 	Permission string `json:"permission"`
@@ -253,7 +255,7 @@ func VerifySSHAuthToken(auth string, userInRepo UserInRepo) error {
 		return generateError(err, msg)
 	}
 	bodyReader := bytes.NewReader(jsonData)
-	path := fmt.Sprintf("https://gitee.com/%v/%v.git/info/lfs/objects/batch", userInRepo.Owner, userInRepo.Repo)
+	path := fmt.Sprintf("https://gitee.com/%s/%s.git/info/lfs/objects/batch", userInRepo.Owner, userInRepo.Repo)
 	headers := http.Header{
 		accept:         []string{"application/vnd.git-lfs+json"},
 		userAgent:      []string{"git-lfs/3.5.1 (GitHub; linux amd64; go 1.21.8)"},

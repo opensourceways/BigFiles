@@ -231,7 +231,7 @@ func verifyUserDownload(giteeUser *giteeUser, userInRepo UserInRepo) error {
 
 func VerifySSHAuthToken(auth string, userInRepo UserInRepo) error {
 	batchCheckRequest := batch.Request{
-		Operation: "upload",
+		Operation: userInRepo.Operation,
 		Transfers: []string{
 			"lfs-standalone-file",
 			"basic",

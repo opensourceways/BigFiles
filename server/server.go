@@ -142,15 +142,18 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = auth.CheckRepoOwner(userInRepo); req.Operation == "upload" || err != nil {
+	if err = auth.CheckRepoOwner(userInRepo); req.Operation == "upload" ||
+		(err != nil && strings.HasPrefix(err.Error(), "not_found")) {
 		err := s.dealWithAuthError(userInRepo, w, r)
 		if err != nil {
 			return
 		}
+	} else if err != nil {
+		return
+	} else {
+		resp := s.handleRequestObject(req)
+		must(json.NewEncoder(w).Encode(resp))
 	}
-
-	resp := s.handleRequestObject(req)
-	must(json.NewEncoder(w).Encode(resp))
 }
 
 func (s *server) handleRequestObject(req batch.Request) batch.Response {

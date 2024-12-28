@@ -133,7 +133,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	userInRepo.Operation = req.Operation
 	userInRepo.Owner = chi.URLParam(r, "owner")
 	userInRepo.Repo = chi.URLParam(r, "repo")
-
+	userInRepo.Repo = strings.TrimSuffix(userInRepo.Repo, ".git")
 	if !validatecfg.ownerRegexp.MatchString(userInRepo.Owner) || !validatecfg.reponameRegexp.MatchString(userInRepo.Repo) {
 		w.WriteHeader(http.StatusBadRequest)
 		must(json.NewEncoder(w).Encode(batch.ErrorResponse{

@@ -56,7 +56,7 @@ type LfsObj struct {
 	Owner      string    `gorm:"size:100;not null;index:idx_platform;comment:'仓库owner'"`                      // 仓库owner，参与复合索引
 	Repo       string    `gorm:"size:100;not null;index:idx_platform;comment:'仓库名称'"`                         // 仓库名称，参与复合索引
 	Operator   string    `gorm:"size:100;comment:'上一次操作人'"`                                                   // 上一次操作人
-	Exist      int       `gorm:"not null;type:TINYINT;default:true;comment:'存在状态，1:存在，0:已删除'"`                // 存在状态
+	Exist      int       `gorm:"not null;type:TINYINT;comment:'存在状态，1:存在，0:已删除'"`                             // 存在状态
 	UpdateTime time.Time `gorm:"not null;default:CURRENT_TIMESTAMP;autoUpdateTime;comment:'修改时间'"`            // 修改时间
 	CreateTime time.Time `gorm:"not null;default:CURRENT_TIMESTAMP;comment:'创建时间'"`                           // 创建时间
 }

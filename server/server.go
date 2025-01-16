@@ -17,6 +17,7 @@ import (
 	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
 	"github.com/metalogical/BigFiles/auth"
 	"github.com/metalogical/BigFiles/batch"
+	"github.com/metalogical/BigFiles/db"
 )
 
 var ObsPutLimit int = 5*int(math.Pow10(9)) - 1 // 5GB - 1
@@ -96,6 +97,8 @@ func New(o Options) (http.Handler, error) {
 
 	r.Get("/", s.healthCheck)
 	r.Post("/{owner}/{repo}/objects/batch", s.handleBatch)
+	r.Get("/{owner}/{repo}/object/list?platform=", s.List)
+	r.Get("/info/lfs/objects/{oid}", s.download)
 
 	return r, nil
 }
@@ -150,6 +153,32 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := s.handleRequestObject(req)
+
+	// 添加元数据
+	if req.Operation == "upload" {
+		for _, object := range req.Objects {
+			lfsObj := db.LfsObj{
+				Repo:       userInRepo.Repo,
+				Owner:      userInRepo.Owner,
+				Oid:        object.OID,
+				Size:       object.Size,
+				CreateTime: time.Now(),
+				UpdateTime: time.Now(),
+				Exist:      1,       // 默认设置为存在
+				Platform:   "gitee", // 默认平台
+				//TODO
+				Operator: "", // 操作人
+			}
+
+			if err := db.InsertLFSObj(lfsObj); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+					Message: "failed to insert metadata",
+				}))
+				return
+			}
+		}
+	}
 	must(json.NewEncoder(w).Encode(resp))
 }
 
@@ -333,5 +362,71 @@ func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {
 func must(err error) {
 	if err != nil {
 		panic(err)
+	}
+}
+
+func (s *server) download(w http.ResponseWriter, r *http.Request) {
+	oid := chi.URLParam(r, "oid")
+	requestObject := &batch.RequestObject{
+		OID: oid,
+	}
+
+	outputObject := &batch.Object{}
+
+	if _, err := s.getObjectMetadataInput(s.key(requestObject.OID)); err != nil {
+		outputObject.Error = &batch.ObjectError{
+			Code:    404,
+			Message: err.Error(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(outputObject.Error)
+		return
+	}
+
+	logrus.Infof("Metadata check pass")
+
+	getObjectInput := &obs.CreateSignedUrlInput{
+		Method:  obs.HttpMethodGet,
+		Bucket:  s.bucket,
+		Key:     s.key(requestObject.OID),
+		Expires: int(s.ttl / time.Second),
+		Headers: map[string]string{contentType: "application/octet-stream"},
+	}
+
+	v := s.generateDownloadUrl(getObjectInput)
+
+	w.Header().Set("Content-Type", "application/json")
+
+	response := map[string]string{"url": v.String()}
+
+	w.WriteHeader(http.StatusOK)
+	err := json.NewEncoder(w).Encode(response)
+	if err != nil {
+		return
+	}
+}
+
+func (s *server) List(w http.ResponseWriter, r *http.Request) {
+	owner := chi.URLParam(r, "owner")
+	repo := chi.URLParam(r, "repo")
+	platform := r.URL.Query().Get("platform")
+
+	var files []db.LfsObj
+
+	// 查询数据库
+	if err := db.Db.Model(&db.LfsObj{}).Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).Find(&files).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 设置响应头为 JSON 格式
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	// 返回 JSON 格式的文件列表
+	if err := json.NewEncoder(w).Encode(files); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }

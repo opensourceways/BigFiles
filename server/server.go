@@ -164,7 +164,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 				Size:       object.Size,
 				CreateTime: time.Now(),
 				UpdateTime: time.Now(),
-				Exist:      1,       // 默认设置为存在
+				Exist:      0,       // 默认设置为存在
 				Platform:   "gitee", // 默认平台
 				//TODO
 				Operator: "", // 操作人

@@ -49,16 +49,16 @@ func DB() *gorm.DB {
 }
 
 type LfsObj struct {
-	ID         int       `gorm:"primaryKey;autoIncrement;comment:'自增ID'"`                                          // 自增ID
-	Oid        string    `gorm:"size:511;not null;default:'';index:idx_oid;comment:'文件OID'"`                       // 文件OID，单列索引
-	Size       int       `gorm:"not null;comment:'文件大小'"`                                                        // 文件大小
+	ID         int       `gorm:"primaryKey;autoIncrement;comment:'自增ID'"`                                     // 自增ID
+	Oid        string    `gorm:"size:511;not null;default:'';index:idx_oid;comment:'文件OID'"`                  // 文件OID，单列索引
+	Size       int       `gorm:"not null;comment:'文件大小'"`                                                     // 文件大小
 	Platform   string    `gorm:"size:64;not null;default:'gitee';index:idx_platform;comment:'所属平台，默认为gitee'"` // 所属平台，单列索引
-	Owner      string    `gorm:"size:100;not null;index:idx_platform;comment:'仓库owner'"`                           // 仓库owner，参与复合索引
-	Repo       string    `gorm:"size:100;not null;index:idx_platform;comment:'仓库名称'"`                            // 仓库名称，参与复合索引
-	Operator   string    `gorm:"size:100;comment:'上一次操作人'"`                                                    // 上一次操作人
-	Exist      int       `gorm:"not null;type:TINYINT;default:true;comment:'存在状态，1:存在，0:已删除'"`              // 存在状态
-	UpdateTime time.Time `gorm:"not null;default:CURRENT_TIMESTAMP;autoUpdateTime;comment:'修改时间'"`               // 修改时间
-	CreateTime time.Time `gorm:"not null;default:CURRENT_TIMESTAMP;comment:'创建时间'"`                              // 创建时间
+	Owner      string    `gorm:"size:100;not null;index:idx_platform;comment:'仓库owner'"`                      // 仓库owner，参与复合索引
+	Repo       string    `gorm:"size:100;not null;index:idx_platform;comment:'仓库名称'"`                         // 仓库名称，参与复合索引
+	Operator   string    `gorm:"size:100;comment:'上一次操作人'"`                                                   // 上一次操作人
+	Exist      int       `gorm:"not null;type:TINYINT;default:true;comment:'存在状态，1:存在，0:已删除'"`                // 存在状态
+	UpdateTime time.Time `gorm:"not null;default:CURRENT_TIMESTAMP;autoUpdateTime;comment:'修改时间'"`            // 修改时间
+	CreateTime time.Time `gorm:"not null;default:CURRENT_TIMESTAMP;comment:'创建时间'"`                           // 创建时间
 }
 
 // InsertLFSObj 插入 LFS 元数据

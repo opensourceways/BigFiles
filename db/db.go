@@ -63,6 +63,10 @@ type LfsObj struct {
 
 // InsertLFSObj 插入 LFS 元数据
 func InsertLFSObj(obj LfsObj) error {
+	err := Db.AutoMigrate(&LfsObj{})
+	if err != nil {
+		return err
+	}
 	result := Db.Create(&obj)
 	if result.Error != nil {
 

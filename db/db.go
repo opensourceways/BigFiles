@@ -67,9 +67,14 @@ func InsertLFSObj(obj LfsObj) error {
 	if err != nil {
 		return err
 	}
+
+	var existingObj LfsObj
+	if err := Db.Where("oid = ? AND repo = ? AND owner = ?", obj.Oid, obj.Repo, obj.Owner).First(&existingObj).Error; err == nil {
+		return nil
+	}
+
 	result := Db.Create(&obj)
 	if result.Error != nil {
-
 		return fmt.Errorf("failed to insert LFS object: %w", result.Error)
 	}
 	return nil

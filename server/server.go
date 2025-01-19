@@ -124,7 +124,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	var req batch.Request
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		must(json.NewEncoder(w).Encode(batch.ErrorResponse{
 			Message: "could not parse request",
 			DocURL:  "https://github.com/git-lfs/git-lfs/blob/v2.12.0/docs/api/batch.md#requests",
@@ -177,6 +177,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
 	must(json.NewEncoder(w).Encode(resp))
 }
 

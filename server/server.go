@@ -162,7 +162,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 				Owner:    userInRepo.Owner,
 				Oid:      object.OID,
 				Size:     object.Size,
-				Exist:    0,       // 默认设置为存在
+				Exist:    1,       // 默认设置为存在
 				Platform: "gitee", // 默认平台
 				//TODO
 				Operator: "", // 操作人

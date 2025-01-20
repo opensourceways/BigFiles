@@ -99,6 +99,7 @@ func New(o Options) (http.Handler, error) {
 	r.Post("/{owner}/{repo}/objects/batch", s.handleBatch)
 	r.Get("/{owner}/{repo}/object/list", s.List)
 	r.Get("/info/lfs/objects/{oid}", s.download)
+	r.Get("/repos/list", s.listAllRepos)
 
 	return r, nil
 }
@@ -425,6 +426,46 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 
 	// 返回 JSON 格式的文件列表
 	if err := json.NewEncoder(w).Encode(files); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
+	searchKey := r.URL.Query().Get("searchKey")
+
+	var repos []struct {
+		Owner string `json:"owner"`
+		Repo  string `json:"repo"`
+	}
+
+	query := db.Db.Model(&db.LfsObj{}).Select("DISTINCT owner, repo").Where("exist = 1")
+
+	if searchKey != "" {
+		parts := strings.SplitN(searchKey, "/", 2)
+		if len(parts) == 2 {
+			owner := parts[0]
+			repo := parts[1]
+			query = query.Where("owner LIKE ? AND repo LIKE ?", "%"+owner+"%", "%"+repo+"%")
+		} else {
+			query = query.Where("owner LIKE ? OR repo LIKE ?", "%"+searchKey+"%", "%"+searchKey+"%")
+		}
+	}
+
+	if err := query.Find(&repos).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var repoList []string
+	for _, r := range repos {
+		repoList = append(repoList, r.Owner+"/"+r.Repo)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(repoList); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

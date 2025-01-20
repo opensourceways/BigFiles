@@ -97,7 +97,7 @@ func New(o Options) (http.Handler, error) {
 
 	r.Get("/", s.healthCheck)
 	r.Post("/{owner}/{repo}/objects/batch", s.handleBatch)
-	r.Get("/{owner}/{repo}/object/list?platform=", s.List)
+	r.Get("/{owner}/{repo}/object/list", s.List)
 	r.Get("/info/lfs/objects/{oid}", s.download)
 
 	return r, nil

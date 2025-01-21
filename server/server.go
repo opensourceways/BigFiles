@@ -470,15 +470,15 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var repoList []struct {
-		Owner     string    `json:"owner"` // 新增字段
-		Repo      string    `json:"repo"`  // 新增字段
-		Size      int64     `json:"size"`
-		Time      int64     `json:"time"`
-		FirstFile time.Time `json:"first_file_time"`
+		Owner         string    `json:"owner"` // 新增字段
+		Repo          string    `json:"repo"`  // 新增字段
+		Size          int       `json:"size"`
+		Time          int64     `json:"time"`
+		FirstFileTime time.Time `json:"first_file_time"`
 	}
 
 	query := db.Db.Model(&db.LfsObj{}).
-		Select("owner, repo, " + // 分开选择 owner 和 repo
+		Select("owner, repo, " +
 			"SUM(CASE WHEN exist = 1 THEN size ELSE 0 END) AS total_size, " +
 			"MIN(create_time) AS first_file_time").
 		Group("owner, repo").

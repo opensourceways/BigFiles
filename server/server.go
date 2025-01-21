@@ -434,12 +434,12 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	searchKey := r.URL.Query().Get("searchKey")
 
-	var repos []struct {
-		Owner string `json:"owner"`
-		Repo  string `json:"repo"`
-	}
+	var repoList [][]interface{}
 
-	query := db.Db.Model(&db.LfsObj{}).Select("DISTINCT owner, repo").Where("exist = 1")
+	query := db.Db.Model(&db.LfsObj{}).
+		Select("owner, repo, SUM(size) as total_size, MIN(create_time) as first_file_time").
+		Where("exist = 1").
+		Group("owner, repo")
 
 	if searchKey != "" {
 		parts := strings.SplitN(searchKey, "/", 2)
@@ -452,14 +452,24 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var repos []struct {
+		Owner     string    `json:"owner"`
+		Repo      string    `json:"repo"`
+		TotalSize int64     `json:"total_size"`
+		FirstFile time.Time `json:"first_file_time"`
+	}
+
 	if err := query.Find(&repos).Error; err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	var repoList []string
 	for _, r := range repos {
-		repoList = append(repoList, r.Owner+"/"+r.Repo)
+		repoList = append(repoList, []interface{}{
+			r.Owner + "/" + r.Repo,
+			r.TotalSize,
+			r.FirstFile,
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")

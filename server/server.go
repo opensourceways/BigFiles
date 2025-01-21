@@ -384,8 +384,6 @@ func (s *server) download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logrus.Infof("Metadata check pass")
-
 	getObjectInput := &obs.CreateSignedUrlInput{
 		Method:  obs.HttpMethodGet,
 		Bucket:  s.bucket,
@@ -414,18 +412,35 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 
 	var files []db.LfsObj
 
-	// 查询数据库
 	if err := db.Db.Model(&db.LfsObj{}).Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).Find(&files).Error; err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// 设置响应头为 JSON 格式
+	type FileResponse struct {
+		Owner      string `json:"owner"`
+		Repo       string `json:"repo"`
+		Size       int    `json:"size"`
+		CreateTime int64  `json:"create_time"`
+		UpdateTime int64  `json:"update_time"`
+	}
+
+	var response []FileResponse
+
+	for _, file := range files {
+		response = append(response, FileResponse{
+			Owner:      file.Owner,
+			Repo:       file.Repo,
+			Size:       file.Size,
+			CreateTime: file.CreateTime.Unix(),
+			UpdateTime: file.UpdateTime.Unix(),
+		})
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	// 返回 JSON 格式的文件列表
-	if err := json.NewEncoder(w).Encode(files); err != nil {
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

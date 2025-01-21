@@ -468,14 +468,14 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var repoList []struct {
-		Repo string `json:"repo"`
-		Size int64  `json:"size"`
-		Time int64  `json:"time"`
+		Repo      string    `json:"repo"`
+		Size      int64     `json:"size"`
+		Time      int64     `json:"time"`
+		FirstFile time.Time `json:"first_file_time"` // 添加此字段
 	}
 
 	query := db.Db.Model(&db.LfsObj{}).
-		Select("owner || '/' || repo as repo, SUM(size) as total_size, MIN(create_time) as first_file_time").
-		Where("exist = 1").
+		Select("owner || '/' || repo as repo, SUM(CASE WHEN exist = 1 THEN size ELSE 0 END) as total_size, MIN(create_time) as first_file_time").
 		Group("owner, repo").
 		Limit(limit).
 		Offset((page - 1) * limit)
@@ -497,7 +497,7 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i, r := range repoList {
-		repoList[i].Time = r.FirstFile.Unix() // 转换为时间戳
+		repoList[i].Time = r.FirstFile.Unix()
 	}
 
 	w.Header().Set("Content-Type", "application/json")

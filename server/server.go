@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -448,13 +449,36 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	searchKey := r.URL.Query().Get("searchKey")
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
 
-	var repoList [][]interface{}
+	page := 1
+	limit := 10
+
+	if pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	var repoList []struct {
+		Repo string `json:"repo"`
+		Size int64  `json:"size"`
+		Time int64  `json:"time"`
+	}
 
 	query := db.Db.Model(&db.LfsObj{}).
-		Select("owner, repo, SUM(size) as total_size, MIN(create_time) as first_file_time").
+		Select("owner || '/' || repo as repo, SUM(size) as total_size, MIN(create_time) as first_file_time").
 		Where("exist = 1").
-		Group("owner, repo")
+		Group("owner, repo").
+		Limit(limit).
+		Offset((page - 1) * limit)
 
 	if searchKey != "" {
 		parts := strings.SplitN(searchKey, "/", 2)
@@ -467,25 +491,13 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var repos []struct {
-		Owner     string    `json:"owner"`
-		Repo      string    `json:"repo"`
-		TotalSize int64     `json:"total_size"`
-		FirstFile time.Time `json:"first_file_time"`
-	}
-
-	if err := query.Find(&repos).Error; err != nil {
+	if err := query.Scan(&repoList).Error; err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	for _, r := range repos {
-		timestamp := r.FirstFile.Unix()
-		repoList = append(repoList, []interface{}{
-			r.Owner + "/" + r.Repo,
-			r.TotalSize,
-			timestamp,
-		})
+	for i, r := range repoList {
+		repoList[i].Time = r.FirstFile.Unix() // 转换为时间戳
 	}
 
 	w.Header().Set("Content-Type", "application/json")

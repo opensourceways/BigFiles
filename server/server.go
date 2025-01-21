@@ -470,16 +470,17 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var repoList []struct {
-		Repo      string    `json:"repo"`
+		Owner     string    `json:"owner"` // 新增字段
+		Repo      string    `json:"repo"`  // 新增字段
 		Size      int64     `json:"size"`
 		Time      int64     `json:"time"`
-		FirstFile time.Time `json:"first_file_time"` // 添加此字段
+		FirstFile time.Time `json:"first_file_time"`
 	}
 
 	query := db.Db.Model(&db.LfsObj{}).
-		Select("CONCAT(owner, '/', repo) as repo, " +
-			"SUM(CASE WHEN exist = 1 THEN size ELSE 0 END) as total_size, " +
-			"MIN(create_time) as first_file_time").
+		Select("owner, repo, " + // 分开选择 owner 和 repo
+			"SUM(CASE WHEN exist = 1 THEN size ELSE 0 END) AS total_size, " +
+			"MIN(create_time) AS first_file_time").
 		Group("owner, repo").
 		Limit(limit).
 		Offset((page - 1) * limit)

@@ -422,6 +422,7 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 		Owner      string `json:"owner"`
 		Repo       string `json:"repo"`
 		Size       int    `json:"size"`
+		Oid        string `json:"oid"`
 		CreateTime int64  `json:"create_time"`
 		UpdateTime int64  `json:"update_time"`
 	}
@@ -433,6 +434,7 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 			Owner:      file.Owner,
 			Repo:       file.Repo,
 			Size:       file.Size,
+			Oid:        file.Oid,
 			CreateTime: file.CreateTime.Unix(),
 			UpdateTime: file.UpdateTime.Unix(),
 		})
@@ -475,7 +477,9 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := db.Db.Model(&db.LfsObj{}).
-		Select("owner || '/' || repo as repo, SUM(CASE WHEN exist = 1 THEN size ELSE 0 END) as total_size, MIN(create_time) as first_file_time").
+		Select("CONCAT(owner, '/', repo) as repo, " +
+			"SUM(CASE WHEN exist = 1 THEN size ELSE 0 END) as total_size, " +
+			"MIN(create_time) as first_file_time").
 		Group("owner, repo").
 		Limit(limit).
 		Offset((page - 1) * limit)

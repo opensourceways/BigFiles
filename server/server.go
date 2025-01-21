@@ -502,7 +502,7 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i, r := range repoList {
-		repoList[i].Time = r.FirstFile.Unix()
+		repoList[i].Time = r.FirstFileTime.Unix()
 	}
 
 	w.Header().Set("Content-Type", "application/json")

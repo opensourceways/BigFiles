@@ -465,10 +465,11 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, r := range repos {
+		timestamp := r.FirstFile.Unix()
 		repoList = append(repoList, []interface{}{
 			r.Owner + "/" + r.Repo,
 			r.TotalSize,
-			r.FirstFile,
+			timestamp,
 		})
 	}
 

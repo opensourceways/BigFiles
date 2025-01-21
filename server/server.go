@@ -411,9 +411,38 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 	repo := chi.URLParam(r, "repo")
 	platform := r.URL.Query().Get("platform")
 
+	// 获取分页参数
+	page := 1
+	limit := 10
+
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
 	var files []db.LfsObj
 
-	if err := db.Db.Model(&db.LfsObj{}).Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).Find(&files).Error; err != nil {
+	// 创建查询条件并执行分页查询
+	query := db.Db.Model(&db.LfsObj{}).
+		Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).
+		Limit(limit).
+		Offset((page - 1) * limit)
+
+	if err := query.Find(&files).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 统计总文件数量
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -426,24 +455,31 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 		CreateTime int64  `json:"create_time"`
 		UpdateTime int64  `json:"update_time"`
 	}
-
-	var response []FileResponse
-
-	for _, file := range files {
-		response = append(response, FileResponse{
+	// 构造响应
+	response := make([]FileResponse, len(files))
+	for i, file := range files {
+		response[i] = FileResponse{
 			Owner:      file.Owner,
 			Repo:       file.Repo,
 			Size:       file.Size,
 			Oid:        file.Oid,
 			CreateTime: file.CreateTime.Unix(),
 			UpdateTime: file.UpdateTime.Unix(),
-		})
+		}
+	}
+
+	resp := struct {
+		Total int            `json:"total"`
+		Files []FileResponse `json:"files"`
+	}{
+		Total: int(total),
+		Files: response,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -470,8 +506,8 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var repoList []struct {
-		Owner         string    `json:"owner"` // 新增字段
-		Repo          string    `json:"repo"`  // 新增字段
+		Owner         string    `json:"owner"`
+		Repo          string    `json:"repo"`
 		TotalSize     int       `json:"total_size"`
 		Time          int64     `json:"time"`
 		FirstFileTime time.Time `json:"first_file_time"`
@@ -496,6 +532,12 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	if err := query.Scan(&repoList).Error; err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -505,10 +547,24 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 		repoList[i].Time = r.FirstFileTime.Unix()
 	}
 
+	response := struct {
+		Total int `json:"total"`
+		Repos []struct {
+			Owner         string    `json:"owner"`
+			Repo          string    `json:"repo"`
+			TotalSize     int       `json:"total_size"`
+			Time          int64     `json:"time"`
+			FirstFileTime time.Time `json:"first_file_time"`
+		} `json:"repos"`
+	}{
+		Total: int(total),
+		Repos: repoList,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	if err := json.NewEncoder(w).Encode(repoList); err != nil {
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

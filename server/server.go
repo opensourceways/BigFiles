@@ -472,7 +472,7 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	var repoList []struct {
 		Owner         string    `json:"owner"` // 新增字段
 		Repo          string    `json:"repo"`  // 新增字段
-		Size          int       `json:"size"`
+		TotalSize     int       `json:"total_size"`
 		Time          int64     `json:"time"`
 		FirstFileTime time.Time `json:"first_file_time"`
 	}

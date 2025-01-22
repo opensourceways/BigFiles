@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/metalogical/BigFiles/db"
 	"log"
 	"net/http"
 	"os"
@@ -100,6 +101,11 @@ func main() {
 		return
 	}
 
+	if err := db.Init(cfg.DBConfig); err != nil {
+		logrus.Errorf("init database config, err:%s", err.Error())
+
+		return
+	}
 	s, err := server.New(server.Options{
 		Prefix:          cfg.Prefix,
 		Bucket:          cfg.LfsBucket,

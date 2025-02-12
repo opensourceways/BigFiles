@@ -517,9 +517,7 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 		Select("owner, repo, " +
 			"SUM(CASE WHEN exist = 1 THEN size ELSE 0 END) AS total_size, " +
 			"MIN(create_time) AS first_file_time").
-		Group("owner, repo").
-		Limit(limit).
-		Offset((page - 1) * limit)
+		Group("owner, repo")
 
 	if searchKey != "" {
 		parts := strings.SplitN(searchKey, "/", 2)
@@ -537,6 +535,8 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	query = query.Limit(limit).Offset((page - 1) * limit)
 
 	if err := query.Scan(&repoList).Error; err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

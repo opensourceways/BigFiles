@@ -482,16 +482,21 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 
 	page := 1
 	limit := 10
+	allResults := false
 
-	if pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
+	if pageStr == "" && limitStr == "" {
+		allResults = true
+	} else {
+		if pageStr != "" {
+			if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+				page = p
+			}
 		}
-	}
 
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
+		if limitStr != "" {
+			if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+				limit = l
+			}
 		}
 	}
 
@@ -507,9 +512,17 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 		Select("owner, repo, " +
 			"SUM(CASE WHEN exist = 1 THEN size ELSE 0 END) AS total_size, " +
 			"MIN(create_time) AS first_file_time").
-		Group("owner, repo").
-		Limit(limit).
-		Offset((page - 1) * limit)
+		Group("owner, repo")
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if !allResults {
+		query = query.Limit(limit).Offset((page - 1) * limit)
+	}
 
 	if searchKey != "" {
 		parts := strings.SplitN(searchKey, "/", 2)
@@ -520,12 +533,6 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 		} else {
 			query = query.Where("owner LIKE ? OR repo LIKE ?", "%"+searchKey+"%", "%"+searchKey+"%")
 		}
-	}
-
-	var total int64
-	if err := query.Count(&total).Error; err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
 	}
 
 	if err := query.Scan(&repoList).Error; err != nil {

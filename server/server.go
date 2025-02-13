@@ -393,6 +393,8 @@ func (s *server) download(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]string{"url": v.String()}
 
+	w.Header().Set("Access-Control-Allow-Origin", "*") // 允许所有域，您可以指定特定域
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {

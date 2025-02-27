@@ -58,6 +58,47 @@ type Response struct {
 	Objects  []Object `json:"objects"`
 }
 
+type OpenEulerAccountParam struct {
+	AppId     string `json:"app_id"`
+	Url       string `json:"url_path"`
+	GrantType string `json:"grant_type"`
+	AppSecret string `json:"app_secret"`
+}
+
+type ManagerTokenOutput struct {
+	MSG    string `json:"msg"`
+	Token  string `json:"token"`
+	STATUS int    `json:"status"`
+}
+
+type OpenEulerUserInfo struct {
+	Msg  string            `json:"msg"`
+	Code int               `json:"code"`
+	Data OpenEulerUserData `json:"data"`
+}
+
+// 定义 OpenEulerUserData 结构体
+type OpenEulerUserData struct {
+	SignedUp         time.Time  `json:"signedUp"`
+	Identities       []Identity `json:"identities"`
+	PhoneCountryCode string     `json:"phoneCountryCode"`
+	Phone            string     `json:"phone"`
+	Nickname         string     `json:"nickname"`
+	Photo            string     `json:"photo"`
+	Company          string     `json:"company"`
+	Email            string     `json:"email"`
+	Username         string     `json:"username"`
+}
+
+// 定义 Identity 结构体
+type Identity struct {
+	LoginName   string `json:"login_name"`
+	UserIdInIdp string `json:"userIdInIdp"`
+	Identity    string `json:"identity"`
+	UserName    string `json:"user_name"`
+	AccessToken string `json:"accessToken"`
+}
+
 // --
 
 // RFC3339 JSON-encodes a time.Time as an RFC3339 string

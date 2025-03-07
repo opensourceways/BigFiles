@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/metalogical/BigFiles/batch"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
+	"github.com/metalogical/BigFiles/batch"
 	"github.com/metalogical/BigFiles/config"
 	"github.com/sirupsen/logrus"
 )
@@ -32,7 +32,7 @@ const (
 	token                    = "token"
 	accept                   = "Accept"
 	cookie                   = "Cookie"
-	verifyLog                = "verifyUser"
+	verifyLog                = "VerifyUser"
 	userAgent                = "User-Agent"
 	userToken                = "user-token"
 	contentType              = "Content-Type"
@@ -133,7 +133,7 @@ func GiteeAuth() func(UserInRepo) error {
 			return err
 		}
 
-		return verifyUser(userInRepo)
+		return VerifyUser(userInRepo)
 	}
 }
 
@@ -197,8 +197,8 @@ func getToken(username, password string) (string, error) {
 	return accessToken.Token, nil
 }
 
-// verifyUser verifies user permission in repo by access_token and operation
-func verifyUser(userInRepo UserInRepo) error {
+// VerifyUser verifies user permission in repo by access_token and operation
+func VerifyUser(userInRepo UserInRepo) error {
 	path := fmt.Sprintf(
 		"https://gitee.com/api/v5/repos/%s/%s/collaborators/%s/permission%s",
 		userInRepo.Owner,

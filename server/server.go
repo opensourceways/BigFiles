@@ -581,10 +581,13 @@ func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 	oid := r.URL.Query().Get("oid")
 
 	ygCookie, _ := r.Cookie("yg")
+	fmt.Println(ygCookie)
 	utCookie, _ := r.Cookie("ut")
+	fmt.Println(ygCookie)
 
 	userInRepo := auth.UserInRepo{Repo: repo, Owner: owner, Operation: "delete"}
 	userInfo, _ := auth.GetOpenEulerUserInfo(utCookie.Value, ygCookie.Value, userInRepo)
+	fmt.Println(userInfo)
 
 	err := auth.VerifyUser(userInfo)
 	if err != nil {

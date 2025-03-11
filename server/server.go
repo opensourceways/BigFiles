@@ -433,9 +433,10 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 
 	var files []db.LfsObj
 
-	// 创建查询条件并执行分页查询
+	// 创建查询条件并执行分页查询，添加排序
 	query := db.Db.Model(&db.LfsObj{}).
 		Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).
+		Order("create_time DESC"). // 添加按 create_time 降序排列
 		Limit(limit).
 		Offset((page - 1) * limit)
 
@@ -446,7 +447,9 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 
 	// 统计总文件数量
 	var total int64
-	if err := query.Count(&total).Error; err != nil {
+	if err := db.Db.Model(&db.LfsObj{}). // 重新创建查询以统计总数
+		Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).
+		Count(&total).Error; err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -540,7 +543,8 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query = query.Limit(limit).Offset((page - 1) * limit)
+	// 按 first_file_time 降序排列
+	query = query.Order("first_file_time DESC").Limit(limit).Offset((page - 1) * limit)
 
 	if err := query.Scan(&repoList).Error; err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

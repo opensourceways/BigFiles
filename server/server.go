@@ -598,7 +598,7 @@ func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 	userInfo, _ := auth.GetOpenEulerUserInfo(utCookie.Value, ygCookie.Value, userInRepo)
 	fmt.Println(userInfo)
 
-	err := auth.VerifyUser(userInfo)
+	err = auth.VerifyUser(userInfo)
 	if err != nil {
 		// 记录认证失败日志信息
 		logrus.Errorf("User permission verification failed for user %s in repo %s/%s: %v",

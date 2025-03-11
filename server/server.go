@@ -581,7 +581,7 @@ func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 	oid := r.URL.Query().Get("oid")
 
 	ygCookie, _ := r.Cookie("yg")
-	fmt.Println(ygCookie)
+	fmt.Println(111111, owner, repo, oid, ygCookie)
 	utCookie, _ := r.Cookie("ut")
 	fmt.Println(ygCookie)
 

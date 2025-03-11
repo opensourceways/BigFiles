@@ -576,14 +576,23 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 	// 获取路径参数
-	owner := r.URL.Query().Get("owner")
-	repo := r.URL.Query().Get("repo")
-	oid := r.URL.Query().Get("oid")
+	owner := chi.URLParam(r, "owner")
+	repo := chi.URLParam(r, "repo")
+	oid := chi.URLParam(r, "oid")
 
-	ygCookie, _ := r.Cookie("yg")
-	fmt.Println(111111, owner, repo, oid, ygCookie)
-	utCookie, _ := r.Cookie("ut")
-	fmt.Println(ygCookie)
+	ygCookie, err := r.Cookie("_Y_G_")
+	if err != nil {
+		log.Printf("Cookie 'yg' not found: %v", err)
+	} else {
+		log.Printf("Cookie 'yg': %s", ygCookie.Value)
+	}
+
+	utCookie, err := r.Cookie("_U_T_")
+	if err != nil {
+		log.Printf("Cookie 'ut' not found: %v", err)
+	} else {
+		log.Printf("Cookie 'ut': %s", utCookie.Value)
+	}
 
 	userInRepo := auth.UserInRepo{Repo: repo, Owner: owner, Operation: "delete"}
 	userInfo, _ := auth.GetOpenEulerUserInfo(utCookie.Value, ygCookie.Value, userInRepo)

@@ -29,12 +29,14 @@ var (
 )
 
 const (
-	token                    = "token"
+	refer                    = "referer"
 	accept                   = "Accept"
 	cookie                   = "Cookie"
 	verifyLog                = "verifyUser"
 	userAgent                = "User-Agent"
 	userToken                = "user-token"
+	referValue               = "https://openeuler-lfs-website.test.osinfra.cn"
+	tokenParam               = "token"
 	contentType              = "Content-Type"
 	authorization            = "Authorization"
 	acceptEncoding           = "Accept-Encoding"
@@ -71,7 +73,7 @@ type AccessToken struct {
 }
 
 func Init(cfg *config.Config) error {
-	openEulerAccountParam.GrantType = token
+	openEulerAccountParam.GrantType = tokenParam
 	openEulerAccountParam.Url = cfg.OpenEulerAccountConfig.UrlPath
 	if openEulerAccountParam.Url == "" {
 		openEulerAccountParam.Url = os.Getenv("OPENEULER_ACCOUNT_URL")
@@ -326,9 +328,10 @@ func GetOpenEulerUserInfo(ut string, yg string, userInRepo UserInRepo) (UserInRe
 		return userInRepo, generateError(err, msg)
 	}
 	headers := http.Header{
-		userToken: []string{ut},
-		token:     []string{token},
-		cookie:    []string{fmt.Sprintf("_Y_G_=%s", yg)},
+		userToken:  []string{ut},
+		tokenParam: []string{token},
+		cookie:     []string{fmt.Sprintf("_Y_G_=%s", yg)},
+		refer:      []string{referValue},
 	}
 	openEulerUserInfo := new(batch.OpenEulerUserInfo)
 	err = getParsedResponse("GET", path, headers, nil, openEulerUserInfo)

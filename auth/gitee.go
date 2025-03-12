@@ -347,7 +347,7 @@ func GetOpenEulerUserInfo(ut string, yg string, userInRepo UserInRepo) (UserInRe
 		return userInRepo, errors.New(msg)
 	}
 	userInRepo.Token = openEulerUserInfo.Data.Identities[0].AccessToken
-	userInRepo.Username = openEulerUserInfo.Data.Identities[0].UserName
+	userInRepo.Username = openEulerUserInfo.Data.Identities[0].LoginName
 	return userInRepo, err
 }
 

@@ -181,6 +181,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 				}))
 				return
 			}
+			logrus.Infof("insert lfsobj succeed")
 		}
 	}
 

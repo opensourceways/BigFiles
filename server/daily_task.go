@@ -16,7 +16,7 @@ var Prefit string
 func StartScheduledTask() {
 	for {
 		now := time.Now()
-		nextRun := time.Date(now.Year(), now.Month(), now.Day(), 3, 0, 0, 0, now.Location())
+		nextRun := now.Add(time.Minute).Truncate(time.Minute)
 
 		if now.After(nextRun) {
 			nextRun = nextRun.Add(24 * time.Hour)
@@ -31,7 +31,7 @@ func StartScheduledTask() {
 
 func ScheduledTask() {
 	// 获取所有 LfsObj 记录
-	lfsObjs, err := db.GetAll()
+	lfsObjs, err := db.GetUploadLfsObj()
 	if err != nil {
 		fmt.Println("Error retrieving LfsObj records:", err)
 		return
@@ -54,10 +54,16 @@ func ScheduledTask() {
 				if err := db.DB().Save(&obj).Error; err != nil {
 					fmt.Println("Error updating LfsObj record:", err)
 				}
-			} else {
-				// 如果 check 返回 false，删除该记录
-				if err := db.DB().Delete(&obj).Error; err != nil {
-					fmt.Println("Error deleting LfsObj record:", err)
+			}
+			now := time.Now()
+			//计算创建时间差
+			duration := now.Sub(obj.CreateTime)
+
+			//超过1天代表上传失败
+			if duration > 24*time.Hour {
+				obj.Exist = 0
+				if err := db.DB().Save(&obj).Error; err != nil {
+					fmt.Println("Error updating LfsObj record:", err)
 				}
 			}
 		}

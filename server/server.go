@@ -258,6 +258,23 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 }
 
 func (s *server) downloadObject(in *batch.RequestObject, out *batch.Object) {
+	lfsObjs, err := db.SelectLfsObjByOid(in.OID)
+	if err != nil || len(lfsObjs) == 0 {
+		logrus.Infof("cant find object by oid, oid : %s", in.OID)
+		out.Error = &batch.ObjectError{
+			Code:    404,
+			Message: "object not found",
+		}
+		return
+	}
+	if lfsObjs[0].Exist == 0 {
+		logrus.Infof("lfs object not exist, oid : %s", in.OID)
+		out.Error = &batch.ObjectError{
+			Code:    404,
+			Message: "object has been deleted",
+		}
+		return
+	}
 	if metadata, err := s.getObjectMetadataInput(s.key(in.OID)); err != nil {
 		out.Error = &batch.ObjectError{
 			Code:    404,
@@ -448,8 +465,8 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 	// 统计总文件数量
 	var total int64
 	if err := db.Db.Model(&db.LfsObj{}). // 重新创建查询以统计总数
-		Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).
-		Count(&total).Error; err != nil {
+						Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).
+						Count(&total).Error; err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

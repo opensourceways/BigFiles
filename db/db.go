@@ -101,12 +101,21 @@ func CountLFSObj(obj LfsObj) (int64, error) {
 	return count, nil
 }
 
-// GetAll 获取所有 Exist=2 的 LfsObj
-func GetAll() ([]LfsObj, error) {
+// GetUploadLfsObj 获取所有 Exist=2 的 LfsObj
+func GetUploadLfsObj() ([]LfsObj, error) {
 	var results []LfsObj
 	// 查询所有 Exist=2 的记录
 	if err := Db.Where("exist = ?", 2).Find(&results).Error; err != nil {
 		return nil, fmt.Errorf("failed to get LfsObj: %w", err)
 	}
 	return results, nil
+}
+
+// SelectLfsObjByOid 通过OID查找指定了LFS数据
+func SelectLfsObjByOid(oid string) ([]LfsObj, error) {
+	var result []LfsObj
+	if err := Db.Where("oid = ?", oid).Find(&result).Error; err != nil {
+		return nil, fmt.Errorf("failed to get LfsObj: %w", err)
+	}
+	return result, nil
 }

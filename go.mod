@@ -1,8 +1,7 @@
 module github.com/metalogical/BigFiles
 
 go 1.21
-
-toolchain go1.21.4
+toolchain go1.23.7
 
 require (
 	bou.ke/monkey v1.0.2
@@ -20,7 +19,7 @@ require (
 require (
 	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.24.9+incompatible
 	github.com/sirupsen/logrus v1.9.3
-	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/net v0.36.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 )

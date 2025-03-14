@@ -41,7 +41,7 @@ DATA=$(cat <<EOF
   "sources" : [ {
     "type" : "code",
     "params" : {
-      "git_type" : "git",
+      "git_type" : "github",
       "default_branch" : "main",
       "git_url" : "$6",
       "endpoint_id" : "$5",
@@ -66,6 +66,11 @@ DATA=$(cat <<EOF
     "name" : "pr_id",
     "value" : "$2"
   }
+  ,
+    {
+      "name" : "imageUrl",
+      "value" : "$9"
+    }
   ]
 }
 EOF

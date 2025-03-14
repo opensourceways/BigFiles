@@ -88,11 +88,11 @@ func (s *SuiteGitee) TestVerifyUser() {
 		Token:     s.cfg.DefaultToken,
 	}
 
-	err := verifyUser(userInRepo)
+	err := VerifyUser(userInRepo)
 	assert.NotNil(s.T(), err)
 
 	userInRepo.Operation = "upload"
-	err = verifyUser(userInRepo)
+	err = VerifyUser(userInRepo)
 	assert.NotNil(s.T(), err)
 }
 

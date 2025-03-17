@@ -73,27 +73,9 @@ type AccessToken struct {
 }
 
 func Init(cfg *config.Config) error {
-	openEulerAccountParam.GrantType = tokenParam
-	openEulerAccountParam.Url = cfg.OpenEulerAccountConfig.UrlPath
-	if openEulerAccountParam.Url == "" {
-		openEulerAccountParam.Url = os.Getenv("OPENEULER_ACCOUNT_URL")
-		if openEulerAccountParam.Url == "" {
-			return errors.New("OPENEULER_ACCOUNT_URL environment variable not set")
-		}
-	}
-	openEulerAccountParam.AppId = cfg.OpenEulerAccountConfig.AppId
-	if openEulerAccountParam.AppId == "" {
-		openEulerAccountParam.AppId = os.Getenv("MANAGER_APP_ID")
-		if openEulerAccountParam.AppId == "" {
-			return errors.New("MANAGER_APP_ID not set")
-		}
-	}
-	openEulerAccountParam.AppSecret = cfg.OpenEulerAccountConfig.AppSecret
-	if openEulerAccountParam.AppSecret == "" {
-		openEulerAccountParam.AppSecret = os.Getenv("MANAGER_APP_SECRET")
-		if openEulerAccountParam.AppSecret == "" {
-			return errors.New("MANAGER_APP_SECRET not set")
-		}
+	err := InitOpenEulerParam(cfg)
+	if err != nil {
+		return err
 	}
 	clientId = cfg.ClientId
 	if clientId == "" {
@@ -117,6 +99,32 @@ func Init(cfg *config.Config) error {
 		}
 	}
 
+	return nil
+}
+
+func InitOpenEulerParam(cfg *config.Config) error {
+	openEulerAccountParam.GrantType = tokenParam
+	openEulerAccountParam.Url = cfg.OpenEulerAccountConfig.UrlPath
+	if openEulerAccountParam.Url == "" {
+		openEulerAccountParam.Url = os.Getenv("OPENEULER_ACCOUNT_URL")
+		if openEulerAccountParam.Url == "" {
+			return errors.New("OPENEULER_ACCOUNT_URL environment variable not set")
+		}
+	}
+	openEulerAccountParam.AppId = cfg.OpenEulerAccountConfig.AppId
+	if openEulerAccountParam.AppId == "" {
+		openEulerAccountParam.AppId = os.Getenv("MANAGER_APP_ID")
+		if openEulerAccountParam.AppId == "" {
+			return errors.New("MANAGER_APP_ID not set")
+		}
+	}
+	openEulerAccountParam.AppSecret = cfg.OpenEulerAccountConfig.AppSecret
+	if openEulerAccountParam.AppSecret == "" {
+		openEulerAccountParam.AppSecret = os.Getenv("MANAGER_APP_SECRET")
+		if openEulerAccountParam.AppSecret == "" {
+			return errors.New("MANAGER_APP_SECRET not set")
+		}
+	}
 	return nil
 }
 

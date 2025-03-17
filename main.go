@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/metalogical/BigFiles/auth"
 	"github.com/metalogical/BigFiles/config"
+	"github.com/metalogical/BigFiles/db"
 	"github.com/metalogical/BigFiles/server"
 	"github.com/sirupsen/logrus"
 )
@@ -57,6 +59,34 @@ func gatherOptions(fs *flag.FlagSet, args ...string) (options, error) {
 	return o, err
 }
 
+func initConfig(cfg *config.Config) {
+	if err := server.Init(cfg.ValidateConfig); err != nil {
+		logrus.Errorf("load ValidateConfig, err:%s", err.Error())
+		return
+	}
+
+	if err := auth.Init(cfg); err != nil {
+		logrus.Errorf("load gitee config, err:%s", err.Error())
+		return
+	}
+
+	if err := db.Init(cfg.DBConfig); err != nil {
+		logrus.Errorf("init database config, err:%s", err.Error())
+		return
+	}
+}
+
+func initObsClient(cfg *config.Config) {
+	var err error
+	server.ObsClient, err = obs.New(cfg.ObsAccessKeyId, cfg.ObsSecretAccessKey, cfg.ObsRegion, obs.WithSignature(obs.SignatureObs))
+	server.Bucket = cfg.LfsBucket
+	server.Prefit = cfg.Prefix
+	if err != nil {
+		logrus.Errorf("failed to initialize OBS client: %v", err.Error())
+		return
+	}
+}
+
 func main() {
 	o, err := gatherOptions(
 		flag.NewFlagSet(os.Args[0], flag.ExitOnError),
@@ -64,13 +94,11 @@ func main() {
 	)
 	if err != nil {
 		logrus.Errorf("new options failed, err:%s", err.Error())
-
 		return
 	}
 
 	if err := o.Validate(); err != nil {
 		logrus.Errorf("Invalid options, err:%s", err.Error())
-
 		return
 	}
 
@@ -84,21 +112,12 @@ func main() {
 
 	if err := config.LoadConfig(o.service.ConfigFile, cfg, o.service.RemoveCfg); err != nil {
 		logrus.Errorf("load config, err:%s", err.Error())
-
 		return
 	}
 
-	if err := server.Init(cfg.ValidateConfig); err != nil {
-		logrus.Errorf("load ValidateConfig, err:%s", err.Error())
+	initObsClient(cfg)
 
-		return
-	}
-
-	if err := auth.Init(cfg); err != nil {
-		logrus.Errorf("load gitee config, err:%s", err.Error())
-
-		return
-	}
+	initConfig(cfg)
 
 	s, err := server.New(server.Options{
 		Prefix:          cfg.Prefix,
@@ -110,6 +129,9 @@ func main() {
 		IsAuthorized:    auth.GiteeAuth(),
 		SecretAccessKey: cfg.ObsSecretAccessKey,
 	})
+
+	go server.StartScheduledTask()
+
 	srv := &http.Server{
 		Addr:         "0.0.0.0:5000",
 		Handler:      s,
@@ -117,6 +139,7 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  30 * time.Second,
 	}
+
 	if err != nil {
 		log.Fatalln(err)
 	}

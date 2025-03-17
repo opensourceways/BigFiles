@@ -255,7 +255,7 @@ func VerifySSHAuthToken(auth string, userInRepo UserInRepo) error {
 		return generateError(err, msg)
 	}
 	bodyReader := bytes.NewReader(jsonData)
-	path := fmt.Sprintf("https://gitee.com/%s/%s.git/info/lfs/objects/batch", userInRepo.Owner, userInRepo.Repo)
+	path := fmt.Sprintf("https://gitee.com/%s/%s/info/lfs/objects/batch", userInRepo.Owner, userInRepo.Repo)
 	headers := http.Header{
 		accept:         []string{"application/vnd.git-lfs+json"},
 		userAgent:      []string{"git-lfs/3.5.1 (GitHub; linux amd64; go 1.21.8)"},

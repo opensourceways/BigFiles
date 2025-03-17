@@ -689,7 +689,7 @@ func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 获取删除人信息
-	deletedBy := r.Header.Get("X-Deleted-By")
+	deletedBy := userInfo.Username
 
 	// 检查记录是否存在
 	var obj db.LfsObj

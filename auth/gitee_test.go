@@ -29,6 +29,11 @@ func (s *SuiteGitee) SetupSuite() {
 		ClientId:     "clientId",
 		ClientSecret: "clientSecret",
 		DefaultToken: "defaultToken",
+		OpenEulerAccountConfig: config.OpenEulerAccountConfig{
+			AppId:     "appId",
+			UrlPath:   "urlPath",
+			AppSecret: "appSecret",
+		},
 	}
 }
 

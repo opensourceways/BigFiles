@@ -25,11 +25,11 @@ func StartScheduledTask() {
 		duration := nextRun.Sub(now)
 		time.Sleep(duration)
 
-		ScheduledTask()
+		ScanUploadExistTask()
 	}
 }
 
-func ScheduledTask() {
+func ScanUploadExistTask() {
 	// 获取所有 LfsObj 记录
 	lfsObjs, err := db.GetUploadLfsObj()
 	if err != nil {
@@ -39,36 +39,39 @@ func ScheduledTask() {
 
 	if ObsClient != nil {
 		fmt.Println("Performing scheduled task with OBS client...")
-
-		for _, obj := range lfsObjs {
-			// 调用 check 函数检查每个 Oid
-			exists, err := check(obj.Oid)
-			if err != nil {
-				fmt.Println("Error checking Oid:", err)
-				continue // 继续处理下一个记录
-			}
-
-			if exists {
-				// 如果 check 返回 true，更新 exist 字段为 1
-				obj.Exist = 1
-				if err := db.DB().Save(&obj).Error; err != nil {
-					fmt.Println("Error updating LfsObj record:", err)
-				}
-			}
-			now := time.Now()
-			//计算创建时间差
-			duration := now.Sub(obj.CreateTime)
-
-			//超过1天代表上传失败
-			if duration > 24*time.Hour {
-				obj.Exist = 0
-				if err := db.DB().Save(&obj).Error; err != nil {
-					fmt.Println("Error updating LfsObj record:", err)
-				}
-			}
-		}
+		checkExist(lfsObjs)
 	} else {
 		fmt.Println("Obs_Client is not initialized.")
+	}
+}
+
+func checkExist(lfsObjs []db.LfsObj) {
+	for _, obj := range lfsObjs {
+		// 调用 check 函数检查每个 Oid
+		exists, err := check(obj.Oid)
+		if err != nil {
+			fmt.Println("Error checking Oid:", err)
+			continue // 继续处理下一个记录
+		}
+
+		if exists {
+			// 如果 check 返回 true，更新 exist 字段为 1
+			obj.Exist = 1
+			if err := db.DB().Save(&obj).Error; err != nil {
+				fmt.Println("Error updating LfsObj record:", err)
+			}
+		}
+		now := time.Now()
+		//计算创建时间差
+		duration := now.Sub(obj.CreateTime)
+
+		//超过1天代表上传失败
+		if duration > 24*time.Hour {
+			obj.Exist = 0
+			if err := db.DB().Save(&obj).Error; err != nil {
+				fmt.Println("Error updating LfsObj record:", err)
+			}
+		}
 	}
 }
 

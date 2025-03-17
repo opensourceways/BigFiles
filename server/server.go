@@ -27,6 +27,8 @@ import (
 var ObsPutLimit int = 5*int(math.Pow10(9)) - 1 // 5GB - 1
 var oidRegexp = regexp.MustCompile("^[a-f0-9]{64}$")
 var contentType = "Content-Type"
+var jsonHeader = "application/json"
+var obsHeader = "application/octet-stream"
 
 type Options struct {
 	// required
@@ -295,7 +297,7 @@ func (s *server) downloadObject(in *batch.RequestObject, out *batch.Object) {
 	getObjectInput.Bucket = s.bucket
 	getObjectInput.Key = s.key(in.OID)
 	getObjectInput.Expires = int(s.ttl / time.Second)
-	getObjectInput.Headers = map[string]string{contentType: "application/octet-stream"}
+	getObjectInput.Headers = map[string]string{contentType: obsHeader}
 	// 生成下载对象的带授权信息的URL
 	v := s.generateDownloadUrl(getObjectInput)
 
@@ -328,7 +330,7 @@ func (s *server) uploadObject(in *batch.RequestObject, out *batch.Object) {
 	putObjectInput.Bucket = s.bucket
 	putObjectInput.Key = s.key(in.OID)
 	putObjectInput.Expires = int(s.ttl / time.Second)
-	putObjectInput.Headers = map[string]string{contentType: "application/octet-stream"}
+	putObjectInput.Headers = map[string]string{contentType: obsHeader}
 	putObjectOutput, err := s.client.CreateSignedUrl(putObjectInput)
 	if err != nil {
 		panic(err)
@@ -375,7 +377,7 @@ func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {
 		Data:    "healthCheck success",
 	}
 
-	w.Header().Set(contentType, "application/json")
+	w.Header().Set(contentType, jsonHeader)
 	w.WriteHeader(http.StatusOK)
 	must(json.NewEncoder(w).Encode(response))
 }
@@ -401,7 +403,7 @@ func (s *server) download(w http.ResponseWriter, r *http.Request) {
 			Code:    404,
 			Message: err.Error(),
 		}
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(contentType, jsonHeader)
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(outputObject.Error)
 		return
@@ -412,12 +414,12 @@ func (s *server) download(w http.ResponseWriter, r *http.Request) {
 		Bucket:  s.bucket,
 		Key:     s.key(requestObject.OID),
 		Expires: int(s.ttl / time.Second),
-		Headers: map[string]string{contentType: "application/octet-stream"},
+		Headers: map[string]string{contentType: obsHeader},
 	}
 
 	v := s.generateDownloadUrl(getObjectInput)
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(contentType, jsonHeader)
 
 	response := map[string]string{"url": v.String()}
 
@@ -433,7 +435,31 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 	repo := chi.URLParam(r, "repo")
 	platform := r.URL.Query().Get("platform")
 
-	// 获取分页参数
+	page, limit := parsePaginationParams(r)
+
+	files, err := s.getLfsFiles(owner, repo, platform, page, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	total, err := s.countLfsFiles(owner, repo, platform)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp := s.buildListResponse(files, total)
+	w.Header().Set(contentType, jsonHeader)
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func parsePaginationParams(r *http.Request) (int, int) {
 	page := 1
 	limit := 10
 
@@ -449,29 +475,35 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	return page, limit
+}
+
+func (s *server) getLfsFiles(owner, repo, platform string, page, limit int) ([]db.LfsObj, error) {
 	var files []db.LfsObj
 
-	// 创建查询条件并执行分页查询，添加排序
 	query := db.Db.Model(&db.LfsObj{}).
 		Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).
-		Order("create_time DESC"). // 添加按 create_time 降序排列
+		Order("create_time DESC").
 		Limit(limit).
 		Offset((page - 1) * limit)
 
 	if err := query.Find(&files).Error; err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
+	return files, nil
+}
 
-	// 统计总文件数量
+func (s *server) countLfsFiles(owner, repo, platform string) (int64, error) {
 	var total int64
-	if err := db.Db.Model(&db.LfsObj{}). // 重新创建查询以统计总数
-						Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).
-						Count(&total).Error; err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if err := db.Db.Model(&db.LfsObj{}).
+		Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).
+		Count(&total).Error; err != nil {
+		return 0, err
 	}
+	return total, nil
+}
 
+func (s *server) buildListResponse(files []db.LfsObj, total int64) interface{} {
 	type FileResponse struct {
 		Owner      string `json:"owner"`
 		Repo       string `json:"repo"`
@@ -480,7 +512,7 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 		CreateTime int64  `json:"create_time"`
 		UpdateTime int64  `json:"update_time"`
 	}
-	// 构造响应
+
 	response := make([]FileResponse, len(files))
 	for i, file := range files {
 		response[i] = FileResponse{
@@ -493,43 +525,62 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp := struct {
+	return struct {
 		Total int            `json:"total"`
 		Files []FileResponse `json:"files"`
 	}{
 		Total: int(total),
 		Files: response,
 	}
+}
 
-	w.Header().Set("Content-Type", "application/json")
+func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
+	searchKey, page, limit := s.getQueryParams(r)
+
+	repoList, total, err := s.fetchRepoList(searchKey, page, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := s.buildListAllReposResponse(total, repoList)
+
+	w.Header().Set(contentType, jsonHeader)
 	w.WriteHeader(http.StatusOK)
 
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
-func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
+func (s *server) getQueryParams(r *http.Request) (string, int, int) {
 	searchKey := r.URL.Query().Get("searchKey")
-	pageStr := r.URL.Query().Get("page")
-	limitStr := r.URL.Query().Get("limit")
-
 	page := 1
-	limit := 10
+	limit := 0
 
-	if pageStr != "" {
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
 		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
 			page = p
 		}
 	}
 
-	if limitStr != "" {
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
 		}
 	}
 
+	return searchKey, page, limit
+}
+
+func (s *server) fetchRepoList(searchKey string, page, limit int) ([]struct {
+	Owner         string    `json:"owner"`
+	Repo          string    `json:"repo"`
+	TotalSize     int       `json:"total_size"`
+	Time          int64     `json:"time"`
+	FirstFileTime time.Time `json:"first_file_time"`
+}, int64, error) {
 	var repoList []struct {
 		Owner         string    `json:"owner"`
 		Repo          string    `json:"repo"`
@@ -545,35 +596,50 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 		Group("owner, repo")
 
 	if searchKey != "" {
-		parts := strings.SplitN(searchKey, "/", 2)
-		if len(parts) == 2 {
-			owner := parts[0]
-			repo := parts[1]
-			query = query.Where("owner LIKE ? AND repo LIKE ?", "%"+owner+"%", "%"+repo+"%")
-		} else {
-			query = query.Where("owner LIKE ? OR repo LIKE ?", "%"+searchKey+"%", "%"+searchKey+"%")
-		}
+		query = s.applySearchFilter(query, searchKey)
 	}
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, 0, err
 	}
 
 	// 按 first_file_time 降序排列
-	query = query.Order("first_file_time DESC").Limit(limit).Offset((page - 1) * limit)
+	query = query.Order("first_file_time DESC")
+
+	if limit > 0 {
+		query = query.Limit(limit).Offset((page - 1) * limit)
+	}
 
 	if err := query.Scan(&repoList).Error; err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return nil, 0, err
 	}
 
 	for i, r := range repoList {
 		repoList[i].Time = r.FirstFileTime.Unix()
 	}
 
-	response := struct {
+	return repoList, total, nil
+}
+
+func (s *server) applySearchFilter(query *gorm.DB, searchKey string) *gorm.DB {
+	parts := strings.SplitN(searchKey, "/", 2)
+	if len(parts) == 2 {
+		owner := parts[0]
+		repo := parts[1]
+		return query.Where("owner LIKE ? AND repo LIKE ?", "%"+owner+"%", "%"+repo+"%")
+	}
+	return query.Where("owner LIKE ? OR repo LIKE ?", "%"+searchKey+"%", "%"+searchKey+"%")
+}
+
+func (s *server) buildListAllReposResponse(total int64, repoList []struct {
+	Owner         string    `json:"owner"`
+	Repo          string    `json:"repo"`
+	TotalSize     int       `json:"total_size"`
+	Time          int64     `json:"time"`
+	FirstFileTime time.Time `json:"first_file_time"`
+}) interface{} {
+	return struct {
 		Total int `json:"total"`
 		Repos []struct {
 			Owner         string    `json:"owner"`
@@ -585,14 +651,6 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	}{
 		Total: int(total),
 		Repos: repoList,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
 	}
 }
 
@@ -657,7 +715,7 @@ func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 
 	// 返回响应
 	response := map[string]string{"message": "Object marked as deleted successfully"}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(contentType, jsonHeader)
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {

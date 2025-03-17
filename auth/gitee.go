@@ -5,20 +5,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/metalogical/BigFiles/batch"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
+	"github.com/metalogical/BigFiles/batch"
 	"github.com/metalogical/BigFiles/config"
 	"github.com/sirupsen/logrus"
 )
 
 var (
-	clientId     string
-	clientSecret string
-	defaultToken string
+	clientId              string
+	clientSecret          string
+	defaultToken          string
+	openEulerAccountParam batch.OpenEulerAccountParam
 )
 
 var (
@@ -28,14 +29,21 @@ var (
 )
 
 const (
-	accept                = "Accept"
-	verifyLog             = "verifyUser"
-	userAgent             = "User-Agent"
-	contentType           = "Content-Type"
-	authorization         = "Authorization"
-	acceptEncoding        = "Accept-Encoding"
-	formatLogString       = "%s | %s"
-	appendPathAccessToken = "?access_token="
+	refer                    = "referer"
+	accept                   = "Accept"
+	cookie                   = "Cookie"
+	verifyLog                = "verifyUser"
+	userAgent                = "User-Agent"
+	userToken                = "user-token"
+	referValue               = "https://openeuler-lfs-website.test.osinfra.cn"
+	tokenParam               = "token"
+	contentType              = "Content-Type"
+	authorization            = "Authorization"
+	acceptEncoding           = "Accept-Encoding"
+	formatLogString          = "%s | %s"
+	openEulerGetUserInfo     = "/oneid/manager/personal/center/user"
+	appendPathAccessToken    = "?access_token="
+	openEulerGetManagerToken = "/oneid/manager/token"
 )
 
 type giteeUser struct {
@@ -65,6 +73,28 @@ type AccessToken struct {
 }
 
 func Init(cfg *config.Config) error {
+	openEulerAccountParam.GrantType = tokenParam
+	openEulerAccountParam.Url = cfg.OpenEulerAccountConfig.UrlPath
+	if openEulerAccountParam.Url == "" {
+		openEulerAccountParam.Url = os.Getenv("OPENEULER_ACCOUNT_URL")
+		if openEulerAccountParam.Url == "" {
+			return errors.New("OPENEULER_ACCOUNT_URL environment variable not set")
+		}
+	}
+	openEulerAccountParam.AppId = cfg.OpenEulerAccountConfig.AppId
+	if openEulerAccountParam.AppId == "" {
+		openEulerAccountParam.AppId = os.Getenv("MANAGER_APP_ID")
+		if openEulerAccountParam.AppId == "" {
+			return errors.New("MANAGER_APP_ID not set")
+		}
+	}
+	openEulerAccountParam.AppSecret = cfg.OpenEulerAccountConfig.AppSecret
+	if openEulerAccountParam.AppSecret == "" {
+		openEulerAccountParam.AppSecret = os.Getenv("MANAGER_APP_SECRET")
+		if openEulerAccountParam.AppSecret == "" {
+			return errors.New("MANAGER_APP_SECRET not set")
+		}
+	}
 	clientId = cfg.ClientId
 	if clientId == "" {
 		clientId = os.Getenv("CLIENT_ID")
@@ -105,7 +135,7 @@ func GiteeAuth() func(UserInRepo) error {
 			return err
 		}
 
-		return verifyUser(userInRepo)
+		return VerifyUser(userInRepo)
 	}
 }
 
@@ -169,8 +199,8 @@ func getToken(username, password string) (string, error) {
 	return accessToken.Token, nil
 }
 
-// verifyUser verifies user permission in repo by access_token and operation
-func verifyUser(userInRepo UserInRepo) error {
+// VerifyUser verifies user permission in repo by access_token and operation
+func VerifyUser(userInRepo UserInRepo) error {
 	path := fmt.Sprintf(
 		"https://gitee.com/api/v5/repos/%s/%s/collaborators/%s/permission%s",
 		userInRepo.Owner,
@@ -187,20 +217,38 @@ func verifyUser(userInRepo UserInRepo) error {
 	giteeUser := new(giteeUser)
 	err := getParsedResponse("GET", path, headers, nil, &giteeUser)
 	if err != nil {
-		msg := err.Error() + ": verify user permission failed"
-		logrus.Error(fmt.Sprintf(formatLogString, verifyLog, msg))
-		return errors.New(msg)
+		if userInRepo.Operation == "delete" {
+			msg := err.Error() + ": 删除权限校验失败，用户使用的gitee token错误或已经过期，请重新使用gitee登录"
+			return errors.New(msg)
+		} else {
+			msg := err.Error() + ": verify user permission failed"
+			logrus.Error(fmt.Sprintf(formatLogString, verifyLog, msg))
+			return errors.New(msg)
+		}
 	}
 
 	if userInRepo.Operation == "upload" {
 		return verifyUserUpload(giteeUser, userInRepo)
 	} else if userInRepo.Operation == "download" {
 		return verifyUserDownload(giteeUser, userInRepo)
+	} else if userInRepo.Operation == "delete" {
+		return verifyUserDelete(giteeUser, userInRepo)
 	} else {
 		msg := "system_error: unknow operation"
 		logrus.Error(fmt.Sprintf(formatLogString, verifyLog, msg))
 		return errors.New(msg)
 	}
+}
+
+func verifyUserDelete(giteeUser *giteeUser, userInRepo UserInRepo) error {
+	if giteeUser.Permission == uploadPermissions[0] {
+		return nil
+	}
+	msg := fmt.Sprintf("forbidden: user %s has no permission to delete to %s/%s",
+		userInRepo.Username, userInRepo.Owner, userInRepo.Repo)
+	remindMsg := " \n请检查您的仓库是否为公仓，如果不是，请检查您的账号是否在openEuler对应仓库中记录权限"
+	logrus.Error(fmt.Sprintf(formatLogString, verifyLog, giteeUser.Permission))
+	return errors.New(msg + remindMsg)
 }
 
 func verifyUserUpload(giteeUser *giteeUser, userInRepo UserInRepo) error {
@@ -269,6 +317,64 @@ func VerifySSHAuthToken(auth string, userInRepo UserInRepo) error {
 		return generateError(err, msg)
 	}
 	return nil
+}
+
+func GetOpenEulerUserInfo(ut string, yg string, userInRepo UserInRepo) (UserInRepo, error) {
+	path := fmt.Sprintf(openEulerAccountParam.Url, openEulerGetUserInfo)
+	token, err := GetAccountManageToken()
+	if err != nil {
+		msg := "get account manage token failed"
+
+		return userInRepo, generateError(err, msg)
+	}
+	headers := http.Header{
+		userToken:  []string{ut},
+		tokenParam: []string{token},
+		cookie:     []string{fmt.Sprintf("_Y_G_=%s", yg)},
+		refer:      []string{referValue},
+	}
+	openEulerUserInfo := new(batch.OpenEulerUserInfo)
+	err = getParsedResponse("GET", path, headers, nil, openEulerUserInfo)
+	if err != nil {
+		msg := "get open euler user info failed"
+		return userInRepo, generateError(err, msg)
+	}
+	if openEulerUserInfo.Code != 200 {
+		msg := fmt.Sprintf("open euler user info response is not 200, "+
+			"status:%d, msg:%s", openEulerUserInfo.Code, openEulerUserInfo.Msg)
+		logrus.Error(fmt.Sprintf("owner: %s, repo: %s, %s",
+			userInRepo.Repo, userInRepo.Repo, msg))
+		return userInRepo, errors.New(msg)
+	}
+	userInRepo.Token = openEulerUserInfo.Data.Identities[0].AccessToken
+	userInRepo.Username = openEulerUserInfo.Data.Identities[0].LoginName
+	return userInRepo, err
+}
+
+func GetAccountManageToken() (string, error) {
+	path := fmt.Sprintf(openEulerAccountParam.Url, openEulerGetManagerToken)
+	headers := http.Header{contentType: []string{"application/vnd.git-lfs+json"}}
+	inputParam := openEulerAccountParam
+	jsonData, err := json.Marshal(inputParam)
+	if err != nil {
+		msg := ": json marshal failed"
+		return "", generateError(err, msg)
+	}
+	bodyReader := bytes.NewReader(jsonData)
+	managerTokenOutput := new(batch.ManagerTokenOutput)
+	err = getParsedResponse("POST", path, headers, bodyReader, managerTokenOutput)
+	if err != nil {
+		msg := err.Error() +
+			fmt.Sprintf(": get manager token failed, please check appId %s, appSecret %s",
+				openEulerAccountParam.AppId, openEulerAccountParam.AppSecret)
+		return "", generateError(err, msg)
+	}
+	if managerTokenOutput.STATUS != 200 {
+		msg := fmt.Sprintf(": get manager token response faile, "+
+			"response status code %d", managerTokenOutput.STATUS)
+		return "", errors.New(msg)
+	}
+	return managerTokenOutput.Token, err
 }
 
 func generateError(err error, m string) error {

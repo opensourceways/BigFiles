@@ -557,7 +557,7 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 func (s *server) getQueryParams(r *http.Request) (string, int, int) {
 	searchKey := r.URL.Query().Get("searchKey")
 	page := 1
-	limit := 10
+	limit := 0
 
 	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
 		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
@@ -605,7 +605,11 @@ func (s *server) fetchRepoList(searchKey string, page, limit int) ([]struct {
 	}
 
 	// 按 first_file_time 降序排列
-	query = query.Order("first_file_time DESC").Limit(limit).Offset((page - 1) * limit)
+	query = query.Order("first_file_time DESC")
+
+	if limit > 0 {
+		query = query.Limit(limit).Offset((page - 1) * limit)
+	}
 
 	if err := query.Scan(&repoList).Error; err != nil {
 		return nil, 0, err

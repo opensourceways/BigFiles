@@ -597,7 +597,8 @@ func (s *server) fetchRepoList(searchKey string, page, limit int) ([]struct {
 		Select("owner, repo, " +
 			"SUM(CASE WHEN exist = 1 THEN size ELSE 0 END) AS total_size, " +
 			"MIN(create_time) AS first_file_time").
-		Group("owner, repo")
+		Group("owner, repo").
+		Having("SUM(CASE WHEN exist = 1 THEN size ELSE 0 END) > 0")
 
 	if searchKey != "" {
 		query = s.applySearchFilter(query, searchKey)

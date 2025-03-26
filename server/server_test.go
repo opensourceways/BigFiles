@@ -4,12 +4,15 @@ import (
 	"bou.ke/monkey"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/go-chi/chi"
 	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
 	"github.com/metalogical/BigFiles/auth"
 	"github.com/metalogical/BigFiles/batch"
+	"github.com/metalogical/BigFiles/db"
+	"github.com/stretchr/testify/assert"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -286,13 +289,14 @@ func Test_server_downloadObject(t *testing.T) {
 		out *batch.Object
 	}
 	tests := []struct {
-		name          string
-		fields        ServerInfo
-		args          args
-		wantErr       bool
-		mockMetaData  bool
-		mockMetaSize  bool
-		wantErrorCode int
+		name                string
+		fields              ServerInfo
+		args                args
+		wantErr             bool
+		mockMetaData        bool
+		mockMetaSize        bool
+		wantErrorCode       int
+		mockReturnEmptyList bool
 	}{
 		{
 			name:   "download object success",
@@ -307,9 +311,10 @@ func Test_server_downloadObject(t *testing.T) {
 					Size: 100,
 				},
 			},
-			wantErr:      false,
-			mockMetaData: true,
-			mockMetaSize: true,
+			wantErr:             false,
+			mockMetaData:        true,
+			mockMetaSize:        true,
+			mockReturnEmptyList: false,
 		},
 		{
 			name:   "download getObjectMetadataInput failed",
@@ -342,14 +347,29 @@ func Test_server_downloadObject(t *testing.T) {
 					Size: 100,
 				},
 			},
-			wantErr:       false,
-			mockMetaData:  false,
-			mockMetaSize:  false,
-			wantErrorCode: 422,
+			wantErr:             false,
+			mockMetaData:        false,
+			mockMetaSize:        false,
+			wantErrorCode:       422,
+			mockReturnEmptyList: false,
 		},
 	}
+	var mockReturnEmptyList bool
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			mockReturnEmptyList = tt.mockReturnEmptyList
+			monkey.Patch(db.SelectLfsObjByOid, func(oid string) ([]db.LfsObj, error) {
+				if mockReturnEmptyList {
+					return []db.LfsObj{}, nil // 返回空列表
+				}
+				return []db.LfsObj{
+					{
+						Oid:   oid,
+						Exist: 1,
+					},
+				}, nil // 返回一个包含对象的列表
+			})
+			defer monkey.UnpatchAll() // 恢复原始实现
 			o := obs.GetObjectMetadataOutput{
 				ContentLength: int64(tt.args.in.Size),
 			}
@@ -782,6 +802,479 @@ func Test_server_uploadObject(t *testing.T) {
 			}
 			defer panicCheck(t, tt.wantErr)
 			s.uploadObject(tt.args.in, tt.args.out)
+		})
+	}
+}
+
+func Test_server_List(t *testing.T) {
+	type args struct {
+		w http.ResponseWriter
+		r *http.Request
+	}
+	owner := "test_owner"
+	repo := "test_repo"
+	platform := "test_platform"
+	page := 1
+	limit := 10
+
+	// 创建一个带有路径参数和查询参数的请求路径
+	requestPath := fmt.Sprintf("/%s/%s?platform=%s&page=%d&limit=%d", owner, repo, platform, page, limit)
+	req := httptest.NewRequest(http.MethodGet, requestPath, nil)
+	ctx := chi.NewRouteContext()
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
+	ctx.URLParams.Add("owner", owner)
+	ctx.URLParams.Add("repo", repo)
+
+	// 模拟 getLfsFiles 和 countLfsFiles 的返回值
+	mockFiles := []db.LfsObj{
+		{Oid: "123456", Size: 100},
+		{Oid: "789012", Size: 200},
+	}
+	mockTotal := int64(2)
+
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+		fields  ServerInfo
+	}{
+		{
+			name:   "server List success",
+			fields: ServerInfo{
+				// 初始化 ServerInfo 字段
+			},
+			args: args{
+				r: req,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 模拟 getLfsFiles 和 countLfsFiles 函数
+			monkey.Patch((*server).getLfsFiles, func(s *server, owner, repo,
+				platform string, page, limit int) ([]db.LfsObj, error) {
+				return mockFiles, nil
+			})
+			monkey.Patch((*server).countLfsFiles, func(s *server, owner, repo, platform string) (int64, error) {
+				return mockTotal, nil
+			})
+			defer monkey.UnpatchAll()
+
+			s := &server{
+				ttl:          tt.fields.ttl,
+				client:       tt.fields.client,
+				bucket:       tt.fields.bucket,
+				prefix:       tt.fields.prefix,
+				cdnDomain:    tt.fields.cdnDomain,
+				isAuthorized: tt.fields.isAuthorized,
+			}
+			w := httptest.NewRecorder()
+			tt.args.w = w
+
+			s.List(tt.args.w, tt.args.r)
+
+			// 调用验证函数
+			validateListResponse(t, w, mockFiles, mockTotal)
+		})
+	}
+}
+
+// 验证响应状态码、内容类型和响应体
+func validateListResponse(t *testing.T, w *httptest.ResponseRecorder, mockFiles []db.LfsObj, mockTotal int64) {
+	// 验证响应状态码
+	if w.Code != http.StatusOK {
+		t.Errorf("expected response status code %d, got %d", http.StatusOK, w.Code)
+	}
+
+	// 验证响应内容类型
+	contentType := w.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		t.Errorf("expected content type %s, got %s", "application/json", contentType)
+	}
+
+	type FileResponse struct {
+		Owner      string `json:"owner"`       // 文件所有者
+		Repo       string `json:"repo"`        // 仓库名称
+		Size       int    `json:"size"`        // 文件大小
+		Oid        string `json:"oid"`         // 文件 OID
+		CreateTime int64  `json:"create_time"` // 创建时间
+		UpdateTime int64  `json:"update_time"` // 更新时间
+	}
+
+	type ListResponse struct {
+		Total int            `json:"total"` // 文件总数
+		Files []FileResponse `json:"files"` // 文件列表
+	}
+
+	// 验证响应体
+	var resp ListResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Errorf("failed to decode response body: %v", err)
+	}
+
+	if len(resp.Files) != len(mockFiles) {
+		t.Errorf("expected %d files, got %d", len(mockFiles), len(resp.Files))
+	}
+
+	if resp.Total != int(mockTotal) {
+		t.Errorf("expected total %d, got %d", mockTotal, resp.Total)
+	}
+}
+
+func TestBuildListResponse(t *testing.T) {
+	// 固定时间，用于创建测试数据
+	now := time.Now()
+
+	// 测试文件数据
+	total := int64(2) // 预期的文件总数
+	files := []db.LfsObj{
+		{
+			ID:         1,
+			Owner:      "owner1",
+			Repo:       "repo1",
+			Size:       1234,
+			Oid:        "oid1",
+			CreateTime: now,
+			UpdateTime: now,
+			Platform:   "gitee",
+			Operator:   "operator1",
+			Exist:      1,
+		},
+		{
+			ID:         2,
+			Owner:      "owner2",
+			Repo:       "repo2",
+			Size:       5678,
+			Oid:        "oid2",
+			CreateTime: now,
+			UpdateTime: now,
+			Platform:   "gitee",
+			Operator:   "operator2",
+			Exist:      1,
+		},
+	}
+
+	// 创建 server 实例
+	s := &server{}
+
+	// 调用 buildListResponse
+	response := s.buildListResponse(files, total)
+
+	// 进行断言，确保返回的结构符合预期
+	result := response.(struct {
+		Total int            `json:"total"`
+		Files []FileResponse `json:"files"`
+	})
+
+	// 验证结果
+	assert.Equal(t, total, int64(result.Total))
+	assert.Equal(t, "owner1", result.Files[0].Owner)
+	assert.Equal(t, "repo1", result.Files[0].Repo)
+	assert.Equal(t, 1234, result.Files[0].Size)
+	assert.Equal(t, "oid1", result.Files[0].Oid)
+
+	assert.Equal(t, "owner2", result.Files[1].Owner)
+	assert.Equal(t, "repo2", result.Files[1].Repo)
+	assert.Equal(t, 5678, result.Files[1].Size)
+	assert.Equal(t, "oid2", result.Files[1].Oid)
+}
+
+func TestBuildListAllReposResponse(t *testing.T) {
+	// 测试数据
+	total := int64(2)
+	repoList := []struct {
+		Owner         string    `json:"owner"`
+		Repo          string    `json:"repo"`
+		TotalSize     int       `json:"total_size"`
+		Time          int64     `json:"time"`
+		FirstFileTime time.Time `json:"first_file_time"`
+	}{
+		{
+			Owner:         "owner1",
+			Repo:          "repo1",
+			TotalSize:     100,
+			Time:          time.Now().Unix(),
+			FirstFileTime: time.Now(),
+		},
+		{
+			Owner:         "owner2",
+			Repo:          "repo2",
+			TotalSize:     200,
+			Time:          time.Now().Unix(),
+			FirstFileTime: time.Now(),
+		},
+	}
+
+	// 创建 server 实例
+	s := &server{}
+
+	// 调用 buildListAllReposResponse
+	response := s.buildListAllReposResponse(total, repoList)
+
+	// 进行断言，确保返回的结构符合预期
+	result := response.(struct {
+		Total int `json:"total"`
+		Repos []struct {
+			Owner         string    `json:"owner"`
+			Repo          string    `json:"repo"`
+			TotalSize     int       `json:"total_size"`
+			Time          int64     `json:"time"`
+			FirstFileTime time.Time `json:"first_file_time"`
+		} `json:"repos"`
+	})
+
+	// 验证结果
+	assert.Equal(t, 2, result.Total)
+	assert.Equal(t, "owner1", result.Repos[0].Owner)
+	assert.Equal(t, "repo1", result.Repos[0].Repo)
+	assert.Equal(t, 100, result.Repos[0].TotalSize)
+	assert.Equal(t, "owner2", result.Repos[1].Owner)
+	assert.Equal(t, "repo2", result.Repos[1].Repo)
+	assert.Equal(t, 200, result.Repos[1].TotalSize)
+}
+
+func TestGetQueryParams(t *testing.T) {
+	s := &server{}
+
+	// 创建一个 HTTP 请求模拟
+	tests := []struct {
+		url           string
+		expectedKey   string
+		expectedPage  int
+		expectedLimit int
+	}{
+		{"/?searchKey=test&page=1&limit=5", "test", 1, 5},
+		{"/?searchKey=test&page=2", "test", 2, 0},
+		{"/?searchKey=test&limit=10", "test", 1, 10},
+		{"/?page=3&limit=3", "", 3, 3},
+		{"/?page=0&limit=3", "", 1, 3},                    // page 0 should fallback to 1
+		{"/?page=abc&limit=3", "", 1, 3},                  // invalid page should fallback
+		{"/?searchKey=test&page=2&limit=0", "test", 2, 0}, // limit 0 should remain 0
+		{"/", "", 1, 0}, // no query parameters
+	}
+
+	for _, test := range tests {
+		req := httptest.NewRequest("GET", test.url, nil)
+		key, page, limit := s.getQueryParams(req)
+
+		// 使用 assert 来验证结果
+		assert.Equal(t, test.expectedKey, key)
+		assert.Equal(t, test.expectedPage, page)
+		assert.Equal(t, test.expectedLimit, limit)
+	}
+}
+
+func TestDownload(t *testing.T) {
+	type args struct {
+		w http.ResponseWriter
+		r *http.Request
+	}
+
+	// 创建测试用例
+	tests := []struct {
+		name       string
+		fields     ServerInfo
+		args       args
+		wantErr    bool
+		oid        string
+		mockError  error
+		mockOutput string
+	}{
+		{
+			name: "Valid OID - Success",
+			fields: ServerInfo{
+				bucket:    "test-bucket",
+				ttl:       3600 * time.Second,
+				cdnDomain: "test-cdn.example.com",
+			},
+			args: args{
+				r: httptest.NewRequest(http.MethodGet, "/download/valid_oid", nil),
+			},
+			wantErr:    false,
+			oid:        "valid_oid",
+			mockOutput: "https://example.com/download/valid_oid",
+		},
+		{
+			name: "Invalid OID - Not Found",
+			fields: ServerInfo{
+				bucket:    "test-bucket",
+				ttl:       3600 * time.Second,
+				cdnDomain: "test-cdn.example.com",
+			},
+			args: args{
+				r: httptest.NewRequest(http.MethodGet, "/download/invalid_oid", nil),
+			},
+			wantErr:   true,
+			oid:       "invalid_oid",
+			mockError: errors.New("Object not found"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 初始化 server 实例
+			s := &server{
+				ttl:          tt.fields.ttl,
+				client:       tt.fields.client,
+				bucket:       tt.fields.bucket,
+				prefix:       tt.fields.prefix,
+				cdnDomain:    tt.fields.cdnDomain,
+				isAuthorized: tt.fields.isAuthorized,
+			}
+
+			// 创建 chi 路由上下文并设置 OID 参数
+			ctx := chi.NewRouteContext()
+			ctx.URLParams.Add("oid", tt.oid)
+			req := tt.args.r.WithContext(context.WithValue(tt.args.r.Context(), chi.RouteCtxKey, ctx))
+
+			// 创建 ResponseRecorder 记录响应
+			w := httptest.NewRecorder()
+			tt.args.w = w
+
+			// 模拟 getObjectMetadataInput 的行为
+			monkey.Patch((*server).getObjectMetadataInput, func(s *server, key string) (*obs.GetObjectMetadataOutput, error) {
+				if tt.mockError != nil {
+					return nil, tt.mockError
+				}
+				return &obs.GetObjectMetadataOutput{}, nil
+			})
+			defer monkey.UnpatchAll()
+
+			// 模拟 generateDownloadUrl 的行为
+			monkey.Patch((*server).generateDownloadUrl, func(s *server, input *obs.CreateSignedUrlInput) *url.URL {
+				u, _ := url.Parse(tt.mockOutput)
+				return u
+			})
+			defer monkey.UnpatchAll()
+
+			// 调用 download 函数
+			s.download(tt.args.w, req)
+
+			// 调用验证函数
+			if tt.wantErr {
+				validateErrorResponse(t, w, http.StatusNotFound, tt.mockError)
+			} else {
+				validateSuccessResponse(t, w, tt.mockOutput)
+			}
+		})
+	}
+}
+
+// 验证成功响应
+func validateSuccessResponse(t *testing.T, w *httptest.ResponseRecorder, expectedURL string) {
+	// 验证响应状态码
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status code %d, got %d", http.StatusOK, w.Code)
+	}
+
+	// 验证成功响应体
+	var response map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Errorf("failed to decode response body: %v", err)
+	}
+	if url, ok := response["url"]; !ok || url != expectedURL {
+		t.Errorf("expected response to contain 'url': '%s', got %v", expectedURL, response)
+	}
+}
+
+// 验证错误响应
+func validateErrorResponse(t *testing.T, w *httptest.ResponseRecorder, expectedStatusCode int, expectedError error) {
+	// 验证响应状态码
+	if w.Code != expectedStatusCode {
+		t.Errorf("expected status code %d, got %d", expectedStatusCode, w.Code)
+	}
+
+	// 验证错误响应体
+	var errorResponse batch.ObjectError
+	if err := json.Unmarshal(w.Body.Bytes(), &errorResponse); err != nil {
+		t.Errorf("failed to decode error response body: %v", err)
+	}
+	if errorResponse.Code != expectedStatusCode || errorResponse.Message != expectedError.Error() {
+		t.Errorf("expected error response {Code: %d, Message: '%s'}, got %v",
+			expectedStatusCode, expectedError.Error(), errorResponse)
+	}
+}
+
+func TestParsePaginationParams(t *testing.T) {
+	type args struct {
+		r *http.Request
+	}
+
+	tests := []struct {
+		name      string
+		args      args
+		wantPage  int
+		wantLimit int
+	}{
+		{
+			name: "Default values",
+			args: args{
+				r: httptest.NewRequest(http.MethodGet, "/", nil),
+			},
+			wantPage:  1,
+			wantLimit: 10,
+		},
+		{
+			name: "Valid page and limit",
+			args: args{
+				r: httptest.NewRequest(http.MethodGet, "/?page=2&limit=20", nil),
+			},
+			wantPage:  2,
+			wantLimit: 20,
+		},
+		{
+			name: "Invalid page (negative value)",
+			args: args{
+				r: httptest.NewRequest(http.MethodGet, "/?page=-1&limit=20", nil),
+			},
+			wantPage:  1, // 默认值
+			wantLimit: 20,
+		},
+		{
+			name: "Invalid limit (non-numeric value)",
+			args: args{
+				r: httptest.NewRequest(http.MethodGet, "/?page=2&limit=abc", nil),
+			},
+			wantPage:  2,
+			wantLimit: 10, // 默认值
+		},
+		{
+			name: "Missing limit",
+			args: args{
+				r: httptest.NewRequest(http.MethodGet, "/?page=3", nil),
+			},
+			wantPage:  3,
+			wantLimit: 10, // 默认值
+		},
+		{
+			name: "Missing page",
+			args: args{
+				r: httptest.NewRequest(http.MethodGet, "/?limit=15", nil),
+			},
+			wantPage:  1, // 默认值
+			wantLimit: 15,
+		},
+		{
+			name: "Page and limit both invalid",
+			args: args{
+				r: httptest.NewRequest(http.MethodGet, "/?page=abc&limit=-5", nil),
+			},
+			wantPage:  1,  // 默认值
+			wantLimit: 10, // 默认值
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotPage, gotLimit := parsePaginationParams(tt.args.r)
+			if gotPage != tt.wantPage {
+				t.Errorf("parsePaginationParams() gotPage = %v, want %v", gotPage, tt.wantPage)
+			}
+			if gotLimit != tt.wantLimit {
+				t.Errorf("parsePaginationParams() gotLimit = %v, want %v", gotLimit, tt.wantLimit)
+			}
 		})
 	}
 }

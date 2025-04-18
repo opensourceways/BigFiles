@@ -1,6 +1,7 @@
 package db
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -52,6 +53,7 @@ func DB() *gorm.DB {
 type LfsObj struct {
 	ID         int       `gorm:"primaryKey;autoIncrement;comment:'自增ID'"`
 	Oid        string    `gorm:"size:511;not null;default:'';index:idx_oid;comment:'文件OID'"`
+	FileName   string    `gorm:"size:255;default:'';comment:'文件名'"`
 	Size       int       `gorm:"not null;comment:'文件大小'"`
 	Platform   string    `gorm:"size:64;not null;default:'gitee';index:idx_platform;comment:'所属平台，默认为gitee'"`
 	Owner      string    `gorm:"size:100;not null;index:idx_platform;comment:'仓库owner'"`
@@ -120,4 +122,69 @@ func SelectLfsObjByOid(oid string) ([]LfsObj, error) {
 		return nil, fmt.Errorf("failed to get LfsObj: %w", err)
 	}
 	return result, nil
+}
+
+// UpdateLFSObjFileName 更新LFS对象的文件名
+// 参数:
+//   - oid: 文件OID
+//   - newFileName: 新文件名
+//   - operator: 操作人
+//
+// 返回:
+//   - error: 错误信息
+func UpdateLFSObjFileName(oid, newFileName, operator string) error {
+	// 参数校验
+	if oid == "" {
+		return fmt.Errorf("OID不能为空")
+	}
+	if newFileName == "" {
+		return fmt.Errorf("新文件名不能为空")
+	}
+
+	// 开启事务
+	tx := Db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 查询现有记录
+	var obj LfsObj
+	if err := tx.Where("oid = ?", oid).First(&obj).Error; err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("未找到OID为 %s 的记录", oid)
+		}
+		return fmt.Errorf("查询失败: %w", err)
+	}
+
+	// 检查是否需要更新
+	if obj.FileName == newFileName {
+		tx.Rollback()
+		return nil // 文件名相同，无需更新
+	}
+
+	// 执行更新
+	updateData := map[string]interface{}{
+		"file_name":   newFileName,
+		"operator":    operator,
+		"update_time": time.Now(),
+	}
+
+	if err := tx.Model(&LfsObj{}).
+		Where("oid = ?", oid).
+		Updates(updateData).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("更新失败: %w", err)
+	}
+
+	// 提交事务
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("提交事务失败: %w", err)
+	}
+
+	log.Printf("成功更新文件OID: %s, 旧文件名: %s, 新文件名: %s",
+		oid, obj.FileName, newFileName)
+	return nil
 }

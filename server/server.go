@@ -107,6 +107,7 @@ func New(o Options) (http.Handler, error) {
 	r.Post("/{owner}/{repo}/delete/{oid}", s.delete)
 	r.Get("/info/lfs/objects/{oid}", s.download)
 	r.Get("/repos/list", s.listAllRepos)
+	r.Get("/oid/filename", checkOid)
 
 	return r, nil
 }
@@ -153,7 +154,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = auth.CheckRepoOwner(userInRepo); req.Operation == "upload" || err != nil {
+	if _, err = auth.CheckRepoOwner(userInRepo); req.Operation == "upload" || err != nil {
 		err := s.dealWithAuthError(userInRepo, w, r)
 		if err != nil {
 			return
@@ -163,6 +164,13 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	resp := s.handleRequestObject(req)
 
 	// 添加元数据
+	addMetaData(req, w, userInRepo)
+
+	must(json.NewEncoder(w).Encode(resp))
+}
+
+func addMetaData(req batch.Request, w http.ResponseWriter, userInRepo auth.UserInRepo) {
+	// 添加元数据
 	if req.Operation == "upload" {
 		for _, object := range req.Objects {
 			lfsObj := db.LfsObj{
@@ -170,10 +178,9 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 				Owner:    userInRepo.Owner,
 				Oid:      object.OID,
 				Size:     object.Size,
-				Exist:    2,       // 默认设置为2
-				Platform: "gitee", // 默认平台
-				//TODO
-				Operator: "", // 操作人
+				Exist:    2,                   // 默认设置为2
+				Platform: "gitee",             // 默认平台
+				Operator: userInRepo.Username, // 操作人
 			}
 
 			if err := db.InsertLFSObj(lfsObj); err != nil {
@@ -185,9 +192,16 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			}
 			logrus.Infof("insert lfsobj succeed")
 		}
+		// 10分钟后异步执行，带错误恢复
+		time.AfterFunc(10*time.Minute, func() {
+			defer func() {
+				if err := recover(); err != nil {
+					logrus.Errorf("checkRepoOidName panic: %v", err)
+				}
+			}()
+			checkRepoOidName(userInRepo)
+		})
 	}
-
-	must(json.NewEncoder(w).Encode(resp))
 }
 
 func (s *server) handleRequestObject(req batch.Request) batch.Response {
@@ -512,6 +526,7 @@ type FileResponse struct {
 	Repo       string `json:"repo"`
 	Size       int    `json:"size"`
 	Oid        string `json:"oid"`
+	FileName   string `json:"file_name"`
 	CreateTime int64  `json:"create_time"`
 	UpdateTime int64  `json:"update_time"`
 }
@@ -524,6 +539,7 @@ func (s *server) buildListResponse(files []db.LfsObj, total int64) interface{} {
 			Repo:       file.Repo,
 			Size:       file.Size,
 			Oid:        file.Oid,
+			FileName:   file.FileName,
 			CreateTime: file.CreateTime.Unix(),
 			UpdateTime: file.UpdateTime.Unix(),
 		}
@@ -541,7 +557,7 @@ func (s *server) buildListResponse(files []db.LfsObj, total int64) interface{} {
 func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	searchKey, page, limit := s.getQueryParams(r)
 
-	repoList, total, err := s.fetchRepoList(searchKey, page, limit)
+	repoList, total, err := fetchRepoList(searchKey, page, limit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -555,6 +571,115 @@ func (s *server) listAllRepos(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+}
+func checkOid(w http.ResponseWriter, r *http.Request) {
+	checkOidFileName()
+}
+
+func checkOidFileName() {
+	repoList, _, err := fetchRepoList("", 0, 0)
+	if err != nil {
+		logrus.Errorf("fetch repo list failed: %v", err)
+		return
+	}
+	for _, repo := range repoList {
+		userInRepo := auth.UserInRepo{
+			Repo:  repo.Repo,
+			Owner: repo.Owner}
+		logrus.Infof("checkOidFileName owner:%v repo:%v", repo.Owner, repo.Repo)
+		checkRepoOidName(userInRepo)
+
+	}
+
+}
+
+func checkRepoOidName(userInRepo auth.UserInRepo) (oidFileNameMap map[string]auth.FileInfo) {
+	oidFileNameMap, err := auth.GetLFSMapping(userInRepo)
+	if err != nil {
+		logrus.Errorf("get lfs mapping failed: %v", err)
+	}
+	checkOidFileNameMap(oidFileNameMap, userInRepo)
+	if strings.ToLower(userInRepo.Owner) != "src-openeuler" {
+		logrus.Infof("after check owner:%v repo:%v, check src-openeuler", userInRepo.Owner, userInRepo.Repo)
+		repo, err := auth.CheckRepoOwner(userInRepo)
+		if err != nil {
+			return nil
+		}
+		if repo.Parent.Fullname != "" {
+			userInRepo.Owner = strings.Split(repo.Parent.Fullname, "/")[0]
+			userInRepo.Repo = strings.Split(repo.Parent.Fullname, "/")[1]
+			return checkRepoOidName(userInRepo)
+		}
+	}
+	return oidFileNameMap
+}
+
+func checkOidFileNameMap(oidFileNameMap map[string]auth.FileInfo, userInRepo auth.UserInRepo) {
+	if oidFileNameMap == nil {
+		return
+	}
+	for oid, fileInfo := range oidFileNameMap {
+		lfsObjs, err := db.SelectLfsObjByOid(oid)
+		if err != nil {
+			logrus.Errorf("get lfs obj by oid failed: %v", err)
+			continue
+		}
+
+		if len(lfsObjs) == 0 {
+			logrus.Infof("oid:%v not exist, create", oid)
+			lfsObj := db.LfsObj{
+				Repo:     userInRepo.Repo,
+				Owner:    userInRepo.Owner,
+				Oid:      oid,
+				Size:     int(fileInfo.Size),
+				FileName: fileInfo.Name,
+				Exist:    2,
+				Platform: "gitee",
+				Operator: "",
+			}
+			if err = db.InsertLFSObj(lfsObj); err != nil {
+				logrus.Errorf("insert lfs obj failed: %v", err)
+			}
+			continue
+		}
+
+		// 检查对应oid文件在对应仓库下是否存在，如果不存在则创建对应数据
+		checkLfsObjsInfo(oid, lfsObjs, fileInfo, userInRepo)
+	}
+}
+
+func checkLfsObjsInfo(oid string, lfsObjs []db.LfsObj, fileInfo auth.FileInfo, userInRepo auth.UserInRepo) {
+	exist := false
+	logrus.Infof("check oid:%v info", oid)
+	for _, lfsObj := range lfsObjs {
+		if lfsObj.Owner == userInRepo.Owner {
+			exist = true
+		}
+
+		if "" == lfsObj.FileName {
+			err := db.UpdateLFSObjFileName(oid, fileInfo.Name, "")
+			if err != nil {
+				logrus.Errorf("update file name failed: %v", err)
+				return
+			}
+		}
+	}
+
+	if !exist {
+		lfsObj := db.LfsObj{
+			Repo:     userInRepo.Repo,
+			Owner:    userInRepo.Owner,
+			Oid:      oid,
+			Size:     int(fileInfo.Size),
+			FileName: fileInfo.Name,
+			Exist:    2,
+			Platform: "gitee",
+			Operator: "",
+		}
+		if err := db.InsertLFSObj(lfsObj); err != nil {
+			logrus.Errorf("insert not exist lfs obj failed: %v", err)
+		}
 	}
 }
 
@@ -578,7 +703,7 @@ func (s *server) getQueryParams(r *http.Request) (string, int, int) {
 	return searchKey, page, limit
 }
 
-func (s *server) fetchRepoList(searchKey string, page, limit int) ([]struct {
+func fetchRepoList(searchKey string, page, limit int) ([]struct {
 	Owner         string    `json:"owner"`
 	Repo          string    `json:"repo"`
 	TotalSize     int       `json:"total_size"`
@@ -601,7 +726,7 @@ func (s *server) fetchRepoList(searchKey string, page, limit int) ([]struct {
 		Having("SUM(CASE WHEN exist = 1 THEN size ELSE 0 END) > 0")
 
 	if searchKey != "" {
-		query = s.applySearchFilter(query, searchKey)
+		query = applySearchFilter(query, searchKey)
 	}
 
 	var total int64
@@ -627,7 +752,7 @@ func (s *server) fetchRepoList(searchKey string, page, limit int) ([]struct {
 	return repoList, total, nil
 }
 
-func (s *server) applySearchFilter(query *gorm.DB, searchKey string) *gorm.DB {
+func applySearchFilter(query *gorm.DB, searchKey string) *gorm.DB {
 	parts := strings.SplitN(searchKey, "/", 2)
 	if len(parts) == 2 {
 		owner := parts[0]

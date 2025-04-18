@@ -29,6 +29,16 @@ func StartScheduledTask() {
 	}
 }
 
+func ScheduledCheckOidAndFileName() {
+	ticker := time.NewTicker(3 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		checkOidFileName() //立即执行第一次
+		<-ticker.C         // 等待三小时
+	}
+}
+
 func ScanUploadExistTask() {
 	// 获取所有 LfsObj 记录
 	lfsObjs, err := db.GetUploadLfsObj()

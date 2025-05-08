@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"os"
@@ -108,7 +109,7 @@ func New(o Options) (http.Handler, error) {
 	r.Get("/info/lfs/objects/{oid}", s.download)
 	r.Get("/repos/list", s.listAllRepos)
 	r.Get("/oid/filename", checkOid)
-
+	r.Post("/webhook", s.handleGiteeWebhook)
 	return r, nil
 }
 
@@ -846,4 +847,172 @@ func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (s *server) handleGiteeWebhook(w http.ResponseWriter, r *http.Request) {
+	// 1. 解析请求体
+	var payload struct {
+		HookName    string `json:"hook_name"`
+		PullRequest struct {
+			ID        int    `json:"id"`
+			Number    int    `json:"number"`
+			State     string `json:"state"`
+			Title     string `json:"title"`
+			HTMLURL   string `json:"html_url"`
+			DiffURL   string `json:"diff_url"`
+			Merged    bool   `json:"merged"`
+			MergedAt  string `json:"merged_at"`
+			CreatedAt string `json:"created_at"`
+			User      struct {
+				Login string `json:"login"`
+			} `json:"user"`
+			Head struct {
+				Ref  string `json:"ref"`
+				Sha  string `json:"sha"`
+				Repo struct {
+					FullName string `json:"full_name"`
+					Owner    struct {
+						Login string `json:"login"`
+					} `json:"owner"`
+					Name string `json:"name"`
+				} `json:"repo"`
+			} `json:"head"`
+		} `json:"pull_request"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		logrus.Errorf("Failed to decode webhook payload: %v", err)
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	// 2. 检查是否为合并请求
+	if payload.HookName != "merge_request_hooks" {
+		logrus.Infof("Not a merge request hook, skipping. HookName: %s", payload.HookName)
+		writeJSONResponse(w, http.StatusOK, map[string]string{"message": "Not a merge request, skipping"})
+		return
+	}
+
+	// 3. 获取 diff 内容并检查 LFS 文件
+	lfsFiles, err := s.extractLFSFilesFromDiff(payload.PullRequest.DiffURL)
+	if err != nil {
+		logrus.Errorf("Failed to check diff for LFS files: %v", err)
+		http.Error(w, "Failed to check diff", http.StatusInternalServerError)
+		return
+	}
+
+	// 4. 如果存在LFS文件，写入数据库
+	if len(lfsFiles) > 0 {
+		repoOwner := payload.PullRequest.Head.Repo.Owner.Login
+		repoName := payload.PullRequest.Head.Repo.Name
+		operator := payload.PullRequest.User.Login
+
+		for _, lfsFile := range lfsFiles {
+			obj := db.LfsObj{
+				Oid:      lfsFile.Oid,
+				FileName: lfsFile.FileName,
+				Size:     lfsFile.Size,
+				Platform: "gitee",
+				Owner:    repoOwner,
+				Repo:     repoName,
+				Operator: operator,
+				Exist:    1, // 1表示存在
+			}
+
+			if err := db.InsertLFSObj(obj); err != nil {
+				logrus.Errorf("Failed to insert LFS object: %v", err)
+				http.Error(w, "Failed to store LFS metadata", http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
+	// 5. 返回响应
+	response := map[string]interface{}{
+		"message":          "Webhook processed successfully",
+		"lfs_files_count":  len(lfsFiles),
+		"pull_request_id":  payload.PullRequest.ID,
+		"pull_request_url": payload.PullRequest.HTMLURL,
+	}
+	writeJSONResponse(w, http.StatusOK, response)
+}
+
+// LFSFile 表示从diff中提取的LFS文件信息
+type LFSFile struct {
+	Oid      string `json:"oid"`
+	FileName string `json:"file_name"`
+	Size     int    `json:"size"`
+}
+
+// extractLFSFilesFromDiff 从diff中提取LFS文件信息
+func (s *server) extractLFSFilesFromDiff(diffURL string) ([]LFSFile, error) {
+	resp, err := http.Get(diffURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch diff: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	diff, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read diff: %v", err)
+	}
+
+	return parseLFSFilesFromDiff(string(diff))
+}
+
+// parseLFSFilesFromDiff 从diff内容中解析LFS文件
+func parseLFSFilesFromDiff(diffContent string) ([]LFSFile, error) {
+	var lfsFiles []LFSFile
+
+	// 示例解析逻辑 - 实际需要根据您的diff格式调整
+	lines := strings.Split(diffContent, "\n")
+	for i := 0; i < len(lines); i++ {
+		if strings.Contains(lines[i], "version https://git-lfs.github.com/spec/v1") {
+			// 提取oid
+			var oid string
+			if i+1 < len(lines) && strings.HasPrefix(lines[i+1], "oid sha256:") {
+				oid = strings.TrimPrefix(lines[i+1], "oid sha256:")
+			}
+
+			// 提取文件名和大小
+			var fileName string
+			var size int
+			if i+2 < len(lines) && strings.HasPrefix(lines[i+2], "size ") {
+				sizeStr := strings.TrimPrefix(lines[i+2], "size ")
+				size, _ = strconv.Atoi(sizeStr)
+
+				// 假设文件名在前面的diff行中
+				for j := i - 1; j >= 0; j-- {
+					if strings.HasPrefix(lines[j], "diff --git a/") {
+						parts := strings.Split(lines[j], " ")
+						if len(parts) >= 2 {
+							fileName = strings.TrimPrefix(parts[1], "a/")
+						}
+						break
+					}
+				}
+			}
+
+			if oid != "" {
+				lfsFiles = append(lfsFiles, LFSFile{
+					Oid:      oid,
+					FileName: fileName,
+					Size:     size,
+				})
+			}
+		}
+	}
+
+	return lfsFiles, nil
+}
+
+// writeJSONResponse 辅助函数
+func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(data)
 }

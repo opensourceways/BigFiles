@@ -893,7 +893,14 @@ func (s *server) handleGiteeWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. 获取 diff 内容并检查 LFS 文件
+	// 3. 检查是否已合并
+	if !payload.PullRequest.Merged {
+		logrus.Infof("Pull request not merged, skipping. PR ID: %d", payload.PullRequest.ID)
+		writeJSONResponse(w, http.StatusOK, map[string]string{"message": "Pull request not merged, skipping"})
+		return
+	}
+
+	// 4. 获取 diff 内容并检查 LFS 文件
 	lfsFiles, err := s.extractLFSFilesFromDiff(payload.PullRequest.DiffURL)
 	if err != nil {
 		logrus.Errorf("Failed to check diff for LFS files: %v", err)
@@ -901,10 +908,9 @@ func (s *server) handleGiteeWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. 如果存在LFS文件，写入数据库
+	// 5. 如果存在LFS文件，写入数据库
 	if len(lfsFiles) > 0 {
-		repoOwner := payload.PullRequest.Head.Repo.Owner.Login
-		repoName := payload.PullRequest.Head.Repo.Name
+		repoOwner, repoName, _ := strings.Cut(payload.PullRequest.Head.Repo.FullName, "/")
 		operator := payload.PullRequest.User.Login
 
 		for _, lfsFile := range lfsFiles {
@@ -916,7 +922,7 @@ func (s *server) handleGiteeWebhook(w http.ResponseWriter, r *http.Request) {
 				Owner:    repoOwner,
 				Repo:     repoName,
 				Operator: operator,
-				Exist:    1, // 1表示存在
+				Exist:    2,
 			}
 
 			if err := db.InsertLFSObj(obj); err != nil {
@@ -927,12 +933,13 @@ func (s *server) handleGiteeWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 5. 返回响应
+	// 6. 返回响应
 	response := map[string]interface{}{
 		"message":          "Webhook processed successfully",
 		"lfs_files_count":  len(lfsFiles),
 		"pull_request_id":  payload.PullRequest.ID,
 		"pull_request_url": payload.PullRequest.HTMLURL,
+		"merged":           payload.PullRequest.Merged,
 	}
 	writeJSONResponse(w, http.StatusOK, response)
 }
@@ -964,46 +971,53 @@ func (s *server) extractLFSFilesFromDiff(diffURL string) ([]LFSFile, error) {
 	return parseLFSFilesFromDiff(string(diff))
 }
 
-// parseLFSFilesFromDiff 从diff内容中解析LFS文件
 func parseLFSFilesFromDiff(diffContent string) ([]LFSFile, error) {
 	var lfsFiles []LFSFile
-
-	// 示例解析逻辑 - 实际需要根据您的diff格式调整
 	lines := strings.Split(diffContent, "\n")
+
 	for i := 0; i < len(lines); i++ {
-		if strings.Contains(lines[i], "version https://git-lfs.github.com/spec/v1") {
-			// 提取oid
-			var oid string
-			if i+1 < len(lines) && strings.HasPrefix(lines[i+1], "oid sha256:") {
-				oid = strings.TrimPrefix(lines[i+1], "oid sha256:")
-			}
+		// 直接查找 +oid sha256: 行
+		if !strings.HasPrefix(lines[i], "+oid sha256:") {
+			continue
+		}
 
-			// 提取文件名和大小
-			var fileName string
-			var size int
-			if i+2 < len(lines) && strings.HasPrefix(lines[i+2], "size ") {
-				sizeStr := strings.TrimPrefix(lines[i+2], "size ")
-				size, _ = strconv.Atoi(sizeStr)
+		var (
+			oid      string
+			fileName string
+			size     int
+		)
 
-				// 假设文件名在前面的diff行中
-				for j := i - 1; j >= 0; j-- {
-					if strings.HasPrefix(lines[j], "diff --git a/") {
-						parts := strings.Split(lines[j], " ")
-						if len(parts) >= 2 {
-							fileName = strings.TrimPrefix(parts[1], "a/")
-						}
-						break
-					}
+		// 提取OID
+		oid = strings.TrimPrefix(lines[i], "+oid sha256:")
+
+		// 提取Size（检查下一行是否是 +size）
+		if i+1 < len(lines) && strings.HasPrefix(lines[i+1], "+size ") {
+			sizeStr := strings.TrimPrefix(lines[i+1], "+size ")
+			size, _ = strconv.Atoi(sizeStr)
+		}
+
+		// 提取文件名 - 向上查找最近的 diff --git a/ 行
+		for j := i; j >= 0 && j >= i-10; j-- {
+			if strings.HasPrefix(lines[j], "diff --git a/") {
+				parts := strings.SplitN(lines[j][len("diff --git a/"):], " ", 2)
+				if len(parts) > 0 {
+					fileName = parts[0]
+					break
 				}
 			}
+		}
 
-			if oid != "" {
-				lfsFiles = append(lfsFiles, LFSFile{
-					Oid:      oid,
-					FileName: fileName,
-					Size:     size,
-				})
-			}
+		if oid != "" && fileName != "" {
+			lfsFiles = append(lfsFiles, LFSFile{
+				Oid:      oid,
+				FileName: fileName,
+				Size:     size,
+			})
+		}
+
+		// 跳过已处理的size行（如果存在）
+		if i+1 < len(lines) && strings.HasPrefix(lines[i+1], "+size ") {
+			i++
 		}
 	}
 

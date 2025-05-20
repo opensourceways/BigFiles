@@ -29,6 +29,11 @@ func (s *SuiteGitee) SetupSuite() {
 		ClientId:     "clientId",
 		ClientSecret: "clientSecret",
 		DefaultToken: "defaultToken",
+		OpenEulerAccountConfig: config.OpenEulerAccountConfig{
+			AppId:     "appId",
+			UrlPath:   "urlPath",
+			AppSecret: "appSecret",
+		},
 	}
 }
 
@@ -88,11 +93,11 @@ func (s *SuiteGitee) TestVerifyUser() {
 		Token:     s.cfg.DefaultToken,
 	}
 
-	err := verifyUser(userInRepo)
+	err := VerifyUser(userInRepo)
 	assert.NotNil(s.T(), err)
 
 	userInRepo.Operation = "upload"
-	err = verifyUser(userInRepo)
+	err = VerifyUser(userInRepo)
 	assert.NotNil(s.T(), err)
 }
 

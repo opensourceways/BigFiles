@@ -6,12 +6,24 @@ RUN go get github.com/akrylysov/algnhsa && \
     go get github.com/sirupsen/logrus && \
     go build ./main.go
 
-FROM openeuler/openeuler:22.03
+FROM openeuler/openeuler:24.03
 LABEL maintainer="Zhou Yi 1123678689@qq.com"
+
+# 安装依赖工具
+RUN dnf install -y git wget tar gzip && \
+    # 下载git-lfs
+    wget https://github.com/git-lfs/git-lfs/releases/download/v3.3.0/git-lfs-linux-amd64-v3.3.0.tar.gz && \
+    tar -xzf git-lfs-linux-amd64-v3.3.0.tar.gz && \
+    cd git-lfs-3.3.0 && \
+    ./install.sh && \
+    rm -rf git-lfs-* && \
+    dnf clean all
+
 RUN useradd -s /bin/bash BigFiles
 USER BigFiles
 WORKDIR /home/BigFiles
 COPY --chown=BigFiles:group --from=BUILDER /home/main /home/BigFiles/main
+COPY --chown=BigFiles:group --from=BUILDER /home/scripts/lfsNameQuery.py /home/BigFiles/lfsNameQuery.py
 
 EXPOSE 5000
 ENTRYPOINT ["/home/BigFiles/main"]

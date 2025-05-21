@@ -8,7 +8,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/metalogical/BigFiles/batch"
 	"github.com/metalogical/BigFiles/config"
@@ -139,7 +142,7 @@ func GiteeAuth() func(UserInRepo) error {
 			}
 		}
 
-		if err := CheckRepoOwner(userInRepo); err != nil {
+		if _, err := CheckRepoOwner(userInRepo); err != nil {
 			return err
 		}
 
@@ -148,7 +151,7 @@ func GiteeAuth() func(UserInRepo) error {
 }
 
 // CheckRepoOwner checks whether the owner of a repo is allowed to use lfs server
-func CheckRepoOwner(userInRepo UserInRepo) error {
+func CheckRepoOwner(userInRepo UserInRepo) (Repo, error) {
 	path := fmt.Sprintf(
 		"https://gitee.com/api/v5/repos/%s/%s%s",
 		userInRepo.Owner,
@@ -165,24 +168,24 @@ func CheckRepoOwner(userInRepo UserInRepo) error {
 	err := getParsedResponse("GET", path, headers, nil, &repo)
 	if err != nil {
 		msg := err.Error() + ": check repo_id failed"
-		return errors.New(msg)
+		return *repo, errors.New(msg)
 	}
 	for _, allowedRepo := range allowedRepos {
 		if strings.Split(repo.Fullname, "/")[0] == allowedRepo {
-			return nil
+			return *repo, nil
 		}
 	}
 
 	if repo.Parent.Fullname != "" {
 		for _, allowedRepo := range allowedRepos {
 			if strings.Split(repo.Parent.Fullname, "/")[0] == allowedRepo {
-				return nil
+				return *repo, nil
 			}
 		}
 	}
 	msg := "forbidden: repo has no permission to use this lfs server"
 	logrus.Error(fmt.Sprintf("CheckRepoOwner | %s", msg))
-	return errors.New(msg)
+	return *repo, errors.New(msg)
 }
 
 // getToken gets access_token by username and password
@@ -242,7 +245,7 @@ func VerifyUser(userInRepo UserInRepo) error {
 	} else if userInRepo.Operation == "delete" {
 		return verifyUserDelete(giteeUser, userInRepo)
 	} else {
-		msg := "system_error: unknow operation"
+		msg := "system_error: unknown operation"
 		logrus.Error(fmt.Sprintf(formatLogString, verifyLog, msg))
 		return errors.New(msg)
 	}
@@ -383,6 +386,120 @@ func GetAccountManageToken() (string, error) {
 		return "", errors.New(msg)
 	}
 	return managerTokenOutput.Token, err
+}
+
+// FileInfo 包含LFS文件的名称和大小信息
+type FileInfo struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
+// GetLFSMapping 调用Python脚本获取LFS文件映射
+// 参数:
+//   - userInRepo: 仓库相关信息
+//   - pythonScriptPath: Python脚本路径(可选)
+//
+// 返回:
+//   - map[string]FileInfo: OID到文件信息的映射
+//   - error: 错误信息
+func GetLFSMapping(userInRepo UserInRepo, pythonScriptPath ...string) (map[string]FileInfo, error) {
+	owner := userInRepo.Owner
+	repo := userInRepo.Repo
+	username := userInRepo.Username
+	token := userInRepo.Token
+
+	// 确定Python脚本路径
+	scriptPath, err := resolveScriptPath(pythonScriptPath...)
+	if err != nil {
+		return nil, err
+	}
+
+	// 创建临时文件
+	outputFile, cleanup, err := createTempOutputFile()
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	// 构建并执行命令
+	cmd := exec.Command("python3")
+	cmd.Args = append(cmd.Args, scriptPath)
+	cmd.Args = append(cmd.Args, owner)
+	cmd.Args = append(cmd.Args, repo)
+	cmd.Args = append(cmd.Args, outputFile)
+	cmd.Args = append(cmd.Args, username)
+	cmd.Args = append(cmd.Args, token)
+	cmd.Stderr = os.Stderr
+
+	// 运行命令
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return nil, fmt.Errorf("Python脚本执行失败，退出码%d: %w", exitErr.ExitCode(), err)
+		}
+		return nil, fmt.Errorf("执行Python脚本出错: %w", err)
+	}
+
+	// 读取并解析结果
+	return parseOutputFile(outputFile)
+}
+
+// 解析脚本路径
+func resolveScriptPath(pythonScriptPath ...string) (string, error) {
+	if len(pythonScriptPath) > 0 {
+		return pythonScriptPath[0], nil
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("获取可执行文件路径失败: %w", err)
+	}
+
+	scriptPath := filepath.Join(filepath.Dir(exePath), "lfsNameQuery.py")
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("Python脚本不存在于: %s", scriptPath)
+	}
+
+	return scriptPath, nil
+}
+
+// 创建临时输出文件
+func createTempOutputFile() (string, func(), error) {
+	tempDir := os.TempDir()
+	outputFile := filepath.Join(tempDir, fmt.Sprintf("lfs_mapping_%d.json", time.Now().UnixNano()))
+	cleanup := func() {
+		err := os.Remove(outputFile)
+		if err != nil {
+			logrus.Warnf("Failed to remove temporary output file %s", outputFile)
+			return
+		}
+	}
+	return outputFile, cleanup, nil
+}
+
+// 解析输出文件
+func parseOutputFile(outputFile string) (map[string]FileInfo, error) {
+	// 转换为绝对路径
+	absPath, err := filepath.Abs(outputFile)
+	safeDir := "/tmp"
+	// 检查路径是否在安全目录内
+	if !strings.HasPrefix(filepath.Clean(absPath), safeDir) {
+		return nil, fmt.Errorf("access denied: file must be in %s", safeDir)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("invalid file path: %w", err)
+	}
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("读取输出文件失败: %w", err)
+	}
+
+	var mapping map[string]FileInfo
+	if err := json.Unmarshal(data, &mapping); err != nil {
+		return nil, fmt.Errorf("解析JSON失败: %w", err)
+	}
+
+	return mapping, nil
 }
 
 func generateError(err error, m string) error {

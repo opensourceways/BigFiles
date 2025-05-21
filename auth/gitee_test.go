@@ -71,7 +71,7 @@ func (s *SuiteGitee) TestCheckRepoOwner() {
 		Owner: s.Owner,
 		Token: s.cfg.DefaultToken,
 	}
-	err := CheckRepoOwner(userInRepo)
+	_, err := CheckRepoOwner(userInRepo)
 	assert.NotNil(s.T(), err)
 
 	// check no_exist repo
@@ -80,7 +80,7 @@ func (s *SuiteGitee) TestCheckRepoOwner() {
 		Owner: "owner",
 		Token: s.cfg.DefaultToken,
 	}
-	err = CheckRepoOwner(userInRepo)
+	_, err = CheckRepoOwner(userInRepo)
 	assert.NotNil(s.T(), err)
 }
 

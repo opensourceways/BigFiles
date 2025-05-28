@@ -917,11 +917,14 @@ func (s *server) handleGiteeWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// 5. 如果存在LFS文件，写入数据库
 	if len(lfsFiles) > 0 {
+		fmt.Println("begin----------")
 		repoOwner, repoName, _ := strings.Cut(payload.PullRequest.Head.Repo.FullName, "/")
 		operator := payload.PullRequest.User.Login
 
 		for _, lfsFile := range lfsFiles {
 			existingObj, err := db.SelectLfsObjByOid(lfsFile.Oid)
+			fmt.Println("search----------", existingObj)
+
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				logrus.Errorf("Failed to query LFS object by OID: %v", err)
 				http.Error(w, "Failed to check LFS object existence", http.StatusInternalServerError)
@@ -940,6 +943,7 @@ func (s *server) handleGiteeWebhook(w http.ResponseWriter, r *http.Request) {
 				Operator: operator,
 				Exist:    2,
 			}
+			fmt.Println("insert----------", obj)
 
 			if err := db.InsertLFSObj(obj); err != nil {
 				logrus.Errorf("Failed to insert LFS object: %v", err)

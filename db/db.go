@@ -170,7 +170,7 @@ func UpdateLFSObjFileName(oid, newFileName, operator string) error {
 	updateData := map[string]interface{}{
 		"file_name":   newFileName,
 		"operator":    operator,
-		"update_time": time.Now(),
+		"update_time": time.Now().Add(8 * time.Hour),
 	}
 
 	if err := tx.Model(&LfsObj{}).

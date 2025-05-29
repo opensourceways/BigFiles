@@ -108,7 +108,7 @@ func New(o Options) (http.Handler, error) {
 	r.Get("/info/lfs/objects/{oid}", s.download)
 	r.Get("/repos/list", s.listAllRepos)
 	r.Get("/oid/filename", checkOid)
-
+	r.Post("/webhook/merge", s.handleGiteeWebhook)
 	return r, nil
 }
 

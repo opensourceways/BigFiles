@@ -979,7 +979,28 @@ type LFSFile struct {
 
 // extractLFSFilesFromDiff 从diff中提取LFS文件信息
 func (s *server) extractLFSFilesFromDiff(diffURL string) ([]LFSFile, error) {
-	resp, err := http.Get(diffURL)
+	parsedURL, err := url.Parse(diffURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	if parsedURL.Scheme != "https" {
+		return nil, fmt.Errorf("only HTTPS protocol is allowed")
+	}
+
+	hostname := parsedURL.Hostname()
+	if !strings.HasSuffix(hostname, ".gitee.com") && hostname != "gitee.com" {
+		return nil, fmt.Errorf("only gitee.com domains are permitted")
+	}
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			DisableKeepAlives: true,
+		},
+	}
+
+	resp, err := client.Get(diffURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch diff: %w", err)
 	}

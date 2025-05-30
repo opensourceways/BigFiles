@@ -14,9 +14,12 @@ type validateConfig struct {
 }
 
 var validatecfg validateConfig
+var Webhook_key string
 
 func Init(cfg config.ValidateConfig) error {
 	var err error
+	Webhook_key = cfg.WebhookKey
+
 	validatecfg.ownerRegexp, err = regexp.Compile(cfg.OwnerRegexp)
 	if err != nil {
 		return fmt.Errorf("failed to compile owner regexp: %w", err)

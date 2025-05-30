@@ -19,6 +19,13 @@ import (
 var diffcheck = "+size "
 
 func (s *server) handleGiteeWebhook(w http.ResponseWriter, r *http.Request) {
+	// 1. 验证 Gitee Token
+	if !verifyGiteeToken(r) {
+		logrus.Errorf("Invalid Gitee token")
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	payload, err := s.parseWebhookPayload(r)
 	if err != nil {
 		logrus.Errorf("Failed to decode webhook payload: %v", err)
@@ -39,6 +46,19 @@ func (s *server) handleGiteeWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeSuccessResponse(w, payload, lfsFiles)
+}
+
+// verifyGiteeToken 验证 Gitee Webhook 的 Token
+func verifyGiteeToken(r *http.Request) bool {
+	// 从 Header 中获取 token
+	receivedToken := r.Header.Get("X-Gitee-Token")
+	if receivedToken == "" {
+		logrus.Warn("Missing X-Gitee-Token in header")
+		return false
+	}
+
+	// 简单比对 token
+	return receivedToken == Webhook_key
 }
 
 // parseWebhookPayload 解析webhook请求体

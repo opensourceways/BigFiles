@@ -59,6 +59,7 @@ func verifyGiteeToken(r *http.Request) bool {
 	}
 
 	// 简单比对 token
+	fmt.Println(receivedToken, Webhook_key, "--------------------")
 	return receivedToken == Webhook_key
 }
 

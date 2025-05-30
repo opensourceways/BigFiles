@@ -52,6 +52,7 @@ func (s *server) handleGiteeWebhook(w http.ResponseWriter, r *http.Request) {
 func verifyGiteeToken(r *http.Request) bool {
 	// 从 Header 中获取 token
 	receivedToken := r.Header.Get("X-Gitee-Token")
+	fmt.Println(receivedToken)
 	if receivedToken == "" {
 		logrus.Warn("Missing X-Gitee-Token in header")
 		return false

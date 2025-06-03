@@ -25,9 +25,10 @@ type Config struct {
 
 type ValidateConfig struct {
 	OwnerRegexp    string `json:"OWNER_REGEXP"         required:"true"`
-	RepoNameRegexp string `json:"REPONAME_REGEXP"         required:"true"`
-	UsernameRegexp string `json:"USERNAME_REGEXP"         required:"true"`
-	PasswordRegexp string `json:"PASSWORD_REGEXP"         required:"true"`
+	RepoNameRegexp string `json:"REPONAME_REGEXP"      required:"true"`
+	UsernameRegexp string `json:"USERNAME_REGEXP"      required:"true"`
+	PasswordRegexp string `json:"PASSWORD_REGEXP"      required:"true"`
+	WebhookKey     string `json:"WEBHOOK_KEY"          required:"true"`
 }
 
 type DBConfig struct {

@@ -339,8 +339,8 @@ func GetOpenEulerUserInfo(ut string, yg string, userInRepo UserInRepo) (UserInRe
 		return userInRepo, generateError(err, msg)
 	}
 	headers := http.Header{
-		userToken:  []string{ut},
-		tokenParam: []string{token},
+		userToken:  []string{token},
+		tokenParam: []string{ut},
 		cookie:     []string{fmt.Sprintf("_Y_G_=%s", yg)},
 		refer:      []string{referValue},
 	}

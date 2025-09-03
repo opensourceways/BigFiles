@@ -61,13 +61,13 @@ WORKDIR /home/BigFiles
 COPY --chown=BigFiles:group --from=BUILDER /home/main /home/BigFiles/main
 COPY --chown=BigFiles:group --from=BUILDER /home/scripts/lfsNameQuery.py /home/BigFiles/lfsNameQuery.py
 
+RUN useradd -s /bin/bash BigFiles
 # 修复应用文件权限
 RUN chown -R BigFiles:BigFiles /home/BigFiles && \
     chmod 750 /home/BigFiles/main && \
     chmod 750 /home/BigFiles/lfsNameQuery.py && \
     chmod 750 /home/BigFiles
 
-RUN useradd -s /bin/bash BigFiles
 USER BigFiles
 
 

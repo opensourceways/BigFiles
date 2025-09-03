@@ -136,7 +136,7 @@ func main() {
 	go server.ScheduledCheckOidAndFileName()
 
 	srv := &http.Server{
-		Addr:         "0.0.0.0:5000",
+		Addr:         "127.0.0.1:5000",
 		Handler:      s,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -147,7 +147,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	log.Println("serving on http://0.0.0.0:5000 ...")
+	log.Println("serving on http://127.0.0.1:5000 ...")
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalln(err)
 	}

@@ -9,21 +9,65 @@ RUN go get github.com/akrylysov/algnhsa && \
 FROM openeuler/openeuler:24.03
 LABEL maintainer="Zhou Yi 1123678689@qq.com"
 
-# 安装依赖工具
-RUN dnf install -y git wget tar gzip && \
-    # 下载git-lfs
-    wget https://github.com/git-lfs/git-lfs/releases/download/v3.3.0/git-lfs-linux-amd64-v3.3.0.tar.gz && \
-    tar -xzf git-lfs-linux-amd64-v3.3.0.tar.gz && \
+# 卸载 /etc/nginx/cert 挂载点（如果存在）
+RUN if mountpoint -q /etc/nginx/cert; then umount /etc/nginx/cert; fi && \
+    rm -rf /etc/nginx/cert
+
+# 安全移除 Nginx 和相关工具（分步执行）
+RUN set -ex && \
+    # 1. 删除网络调试工具二进制
+    rm -f /usr/bin/nc /usr/bin/ncat /usr/bin/nmap && \
+    # 2. 删除Python调试模块（精确删除避免影响其他文件）
+    find /usr/lib64/python3.9/ -maxdepth 1 -type f \
+        \( -name "bdb.py" -o -name "pdb.py" -o -name "timeit.py" -o -name "trace.py" -o -name "tracemalloc.py" \) \
+        -delete && \
+    # 3. 删除APT相关调试工具
+    rm -rf /usr/lib/apt/methods/mirror && \
+    # 4. 删除GCC/GDB文档和共享文件
+    rm -rf /usr/share/gcc /usr/share/gdb && \
+    # 5. 删除Nginx及其所有残留（安全方式）
+    dnf remove -y nginx --setopt=clean_requirements_on_remove=false 2>/dev/null || true && \
+    rm -rf /etc/nginx /var/log/nginx /var/lib/nginx /var/cache/nginx && \
+    userdel nginx 2>/dev/null || true
+
+# 安装Git LFS（最小化安装）
+RUN dnf install -y --setopt=install_weak_deps=false git && \
+    curl -L -o git-lfs.tar.gz https://github.com/git-lfs/git-lfs/releases/download/v3.3.0/git-lfs-linux-amd64-v3.3.0.tar.gz && \
+    tar -xzf git-lfs.tar.gz && \
     cd git-lfs-3.3.0 && \
     ./install.sh && \
-    rm -rf git-lfs-* && \
+    rm -rf git-lfs-* git-lfs.tar.gz && \
     dnf clean all
+
+# 禁用 Shell 历史记录
+RUN echo "set +o history" >> /etc/bashrc && \
+    echo "set +o history" >> /etc/profile && \
+    echo "unset HISTFILE" >> /etc/bashrc && \
+    echo "unset HISTFILE" >> /etc/profile && \
+    echo "export HISTSIZE=0" >> /etc/bashrc && \
+    echo "export HISTSIZE=0" >> /etc/profile
+
+# 修复权限问题
+RUN \
+    # 确保敏感目录权限正确
+    find /home -name ".*" -exec chmod 600 {} \; && \
+    find /home -type f -exec chmod 600 {} \; && \
+    find /home -type d -exec chmod 700 {} \; && \
+
+# 验证 Nginx 已完全移除
+RUN if [ -d /etc/nginx ]; then echo "ERROR: Nginx directory still exists!" && exit 1; fi && \
+    if id nginx >/dev/null 2>&1; then echo "ERROR: Nginx user still exists!" && exit 1; fi
 
 RUN useradd -s /bin/bash BigFiles
 USER BigFiles
 WORKDIR /home/BigFiles
 COPY --chown=BigFiles:group --from=BUILDER /home/main /home/BigFiles/main
 COPY --chown=BigFiles:group --from=BUILDER /home/scripts/lfsNameQuery.py /home/BigFiles/lfsNameQuery.py
+
+# 修复应用文件权限
+RUN chmod 700 /home/BigFiles/main && \
+    chmod 600 /home/BigFiles/lfsNameQuery.py && \
+    chmod 700 /home/BigFiles
 
 EXPOSE 5000
 ENTRYPOINT ["/home/BigFiles/main"]

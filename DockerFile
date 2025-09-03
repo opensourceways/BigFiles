@@ -57,9 +57,6 @@ RUN \
 # 验证 Nginx 已完全移除
 RUN if [ -d /etc/nginx ]; then echo "ERROR: Nginx directory still exists!" && exit 1; fi && \
     if id nginx >/dev/null 2>&1; then echo "ERROR: Nginx user still exists!" && exit 1; fi
-
-RUN useradd -s /bin/bash BigFiles
-USER BigFiles
 WORKDIR /home/BigFiles
 COPY --chown=BigFiles:group --from=BUILDER /home/main /home/BigFiles/main
 COPY --chown=BigFiles:group --from=BUILDER /home/scripts/lfsNameQuery.py /home/BigFiles/lfsNameQuery.py
@@ -68,6 +65,10 @@ COPY --chown=BigFiles:group --from=BUILDER /home/scripts/lfsNameQuery.py /home/B
 RUN chmod 700 /home/BigFiles/main && \
     chmod 600 /home/BigFiles/lfsNameQuery.py && \
     chmod 700 /home/BigFiles
+
+RUN useradd -s /bin/bash BigFiles
+USER BigFiles
+
 
 EXPOSE 5000
 ENTRYPOINT ["/home/BigFiles/main"]

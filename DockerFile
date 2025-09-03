@@ -52,9 +52,7 @@ RUN \
     # 确保敏感目录权限正确
     find /home -name ".*" -exec chmod 600 {} \; && \
     find /home -type f -exec chmod 600 {} \; && \
-    find /home -type d -exec chmod 700 {} \; && \
-    # 修复 /vault/secrets 权限
-    chmod 700 /vault
+    find /home -type d -exec chmod 700 {} \;
 
 # 验证 Nginx 已完全移除
 RUN if [ -d /etc/nginx ]; then echo "ERROR: Nginx directory still exists!" && exit 1; fi && \

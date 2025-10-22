@@ -133,6 +133,7 @@ func main() {
 	})
 
 	go server.StartScheduledTask()
+	go server.ScheduledCheckOidAndFileName()
 
 	srv := &http.Server{
 		Addr:         "0.0.0.0:5000",

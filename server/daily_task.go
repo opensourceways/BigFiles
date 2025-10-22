@@ -29,6 +29,16 @@ func StartScheduledTask() {
 	}
 }
 
+func ScheduledCheckOidAndFileName() {
+	ticker := time.NewTicker(3 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		checkOidFileName() //立即执行第一次
+		<-ticker.C         // 等待三小时
+	}
+}
+
 func ScanUploadExistTask() {
 	// 获取所有 LfsObj 记录
 	lfsObjs, err := db.GetUploadLfsObj()
@@ -48,7 +58,7 @@ func ScanUploadExistTask() {
 func checkExist(lfsObjs []db.LfsObj) {
 	for i := range lfsObjs {
 		obj := lfsObjs[i]
-
+		obj.UpdateTime = time.Now().Add(8 * time.Hour)
 		// 调用 check 函数检查每个 Oid
 		exists, err := check(obj.Oid)
 		if err != nil {

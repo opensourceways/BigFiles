@@ -65,6 +65,7 @@ git config --local lfs.url https://artifacts.openeuler.openatom.cn/{owner}/{repo
 > - 当存在.lfsconfig文件时，使用命令行进行LFS远程地址设置的优先级将高于.lfsconfig文件。  
 > - 在fork一个已经使用第三方LFS服务服务作为LFS远程服务的仓库后，需要需手动使用上述命令设置仓库中LFS远程地址，否则可能会出现权限校验问题，**错误代码401**。  
 > - url中{owner}/{repo}替换为实际的仓库路径，注意仓库路径的大小写。
+> - Artlfs服务在迁移到AtomGit平台后，需要使用账号-token的方式进行身份验证。
 
 - 选择要用LFS追踪的文件
 

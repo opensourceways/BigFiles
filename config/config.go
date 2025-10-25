@@ -16,11 +16,13 @@ type Config struct {
 	CdnDomain              string                 `json:"CDN_DOMAIN"`
 	ObsRegion              string                 `json:"OBS_REGION"`
 	DefaultToken           string                 `json:"DEFAULT_TOKEN"`
+	DefaultGitCodeToken    string                 `json:"DEFAULT_GIT_CODE_TOKEN"`
 	ValidateConfig         ValidateConfig         `json:"VALIDATE_REGEXP"`
 	ObsAccessKeyId         string                 `json:"OBS_ACCESS_KEY_ID"`
 	ObsSecretAccessKey     string                 `json:"OBS_SECRET_ACCESS_KEY"`
 	OpenEulerAccountConfig OpenEulerAccountConfig `json:"OPENEULER_ACCOUNT_PARAM"`
 	DBConfig               DBConfig               `json:"DATABASE"`
+	GitCodeSwitch          bool                   `json:"GIT_CODE_SWITCH" default:"false"`
 }
 
 type ValidateConfig struct {

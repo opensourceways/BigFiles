@@ -26,9 +26,10 @@ func (s *SuiteGitee) SetupSuite() {
 	s.UserName = "user"
 	s.Password = "wrong_pwd"
 	s.cfg = config.Config{
-		ClientId:     "clientId",
-		ClientSecret: "clientSecret",
-		DefaultToken: "defaultToken",
+		ClientId:            "clientId",
+		ClientSecret:        "clientSecret",
+		DefaultToken:        "defaultToken",
+		DefaultGitCodeToken: "defaultGiteCode",
 		OpenEulerAccountConfig: config.OpenEulerAccountConfig{
 			AppId:     "appId",
 			UrlPath:   "urlPath",

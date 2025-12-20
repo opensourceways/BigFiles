@@ -22,7 +22,8 @@ $ git config --local lfs.url https://artifacts.openeuler.openatom.cn/{owner}/{re
 ```
 
 > 当存在.lfsconfig文件时，使用命令行进行LFS远程地址设置的优先级将高于.lfsconfig文件。  
-> url中{owner}/{repo}替换为实际的仓库路径，如：openeuler/lfs。由于Gitee默认会将仓库路径中的大写转化为小写，请确认仓库路径的大小写。
+> url中{owner}/{repo}替换为实际的仓库路径，如：openeuler/lfs。由于Gitee默认会将仓库路径中的大写转化为小写，请确认仓库路径的大小写。  
+> Artlfs服务在迁移到AtomGit平台后，需要使用账号-token的方式进行身份验证。
 
 ## 第三方LFS服务与Gitee的使用差异
 

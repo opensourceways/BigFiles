@@ -61,7 +61,7 @@ func gatherOptions(fs *flag.FlagSet, args ...string) (options, error) {
 }
 
 func initConfig(cfg *config.Config) {
-	if err := server.Init(cfg.ValidateConfig); err != nil {
+	if err := server.Init(cfg); err != nil {
 		logrus.Errorf("load ValidateConfig, err:%s", err.Error())
 		return
 	}

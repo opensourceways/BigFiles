@@ -598,9 +598,10 @@ func checkOidFileName() {
 	}
 	for _, repo := range repoList {
 		userInRepo := auth.UserInRepo{
-			Repo:  repo.Repo,
-			Owner: repo.Owner,
-			Token: token}
+			Repo:     repo.Repo,
+			Owner:    repo.Owner,
+			Username: defaultUsername,
+			Token:    token}
 		logrus.Infof("checkOidFileName owner:%v repo:%v", repo.Owner, repo.Repo)
 		checkRepoOidName(userInRepo)
 

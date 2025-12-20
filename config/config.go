@@ -16,6 +16,7 @@ type Config struct {
 	CdnDomain              string                 `json:"CDN_DOMAIN"`
 	ObsRegion              string                 `json:"OBS_REGION"`
 	DefaultToken           string                 `json:"DEFAULT_TOKEN"`
+	DefaultUsername        string                 `json:"DEFAULT_USERNAME"`
 	DefaultGitCodeToken    string                 `json:"DEFAULT_GIT_CODE_TOKEN"`
 	ValidateConfig         ValidateConfig         `json:"VALIDATE_REGEXP"`
 	ObsAccessKeyId         string                 `json:"OBS_ACCESS_KEY_ID"`

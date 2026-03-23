@@ -128,8 +128,9 @@ func main() {
 		CdnDomain:       cfg.CdnDomain,
 		AccessKeyID:     cfg.ObsAccessKeyId,
 		S3Accelerate:    true,
-		IsAuthorized:    auth.GiteeAuth(),
-		SecretAccessKey: cfg.ObsSecretAccessKey,
+		IsAuthorized:       auth.GiteeAuth(),
+		IsGithubAuthorized: auth.GithubAuth(),
+		SecretAccessKey:    cfg.ObsSecretAccessKey,
 	})
 
 	go server.StartScheduledTask()

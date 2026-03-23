@@ -30,6 +30,7 @@ func (s *SuiteGitee) SetupSuite() {
 		ClientSecret:        "clientSecret",
 		DefaultToken:        "defaultToken",
 		DefaultGitCodeToken: "defaultGiteCode",
+		DefaultGithubToken:  "defaultGithubToken",
 		OpenEulerAccountConfig: config.OpenEulerAccountConfig{
 			AppId:     "appId",
 			UrlPath:   "urlPath",

@@ -24,6 +24,7 @@ var (
 	defaultToken          string
 	defaultGiteCodeToken  string
 	gitCodeSwitch         bool
+	defaultGithubToken    string
 	openEulerAccountParam batch.OpenEulerAccountParam
 )
 
@@ -112,6 +113,13 @@ func Init(cfg *config.Config) error {
 		}
 	}
 
+	defaultGithubToken = cfg.DefaultGithubToken
+	if defaultGithubToken == "" {
+		defaultGithubToken = os.Getenv("DEFAULT_GITHUB_TOKEN")
+		if defaultGithubToken == "" {
+			return errors.New("default github token required")
+		}
+	}
 	gitCodeSwitch = cfg.GitCodeSwitch
 	return nil
 }

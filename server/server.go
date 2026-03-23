@@ -48,6 +48,7 @@ type Options struct {
 	Prefix string
 
 	IsAuthorized func(auth.UserInRepo) error
+	IsGithubAuthorized func(auth.UserInRepo) error
 }
 
 func (o Options) imputeFromEnv() (Options, error) {
@@ -91,18 +92,20 @@ func New(o Options) (http.Handler, error) {
 	}
 
 	s := &server{
-		ttl:          o.TTL,
-		client:       client,
-		bucket:       o.Bucket,
-		prefix:       o.Prefix,
-		cdnDomain:    o.CdnDomain,
-		isAuthorized: o.IsAuthorized,
+		ttl:                o.TTL,
+		client:             client,
+		bucket:             o.Bucket,
+		prefix:             o.Prefix,
+		cdnDomain:          o.CdnDomain,
+		isAuthorized:       o.IsAuthorized,
+		isGithubAuthorized: o.IsGithubAuthorized,
 	}
 
 	r := chi.NewRouter()
 
 	r.Get("/", s.healthCheck)
 	r.Post("/{owner}/{repo}/objects/batch", s.handleBatch)
+	r.Post("/github/{owner}/{repo}/objects/batch", s.handleGithubBatch)
 	r.Get("/{owner}/{repo}/object/list", s.List)
 	r.Post("/{owner}/{repo}/delete/{oid}", s.delete)
 	r.Get("/info/lfs/objects/{oid}", s.download)
@@ -120,6 +123,7 @@ type server struct {
 	cdnDomain string
 
 	isAuthorized func(auth.UserInRepo) error
+	isGithubAuthorized func(auth.UserInRepo) error
 }
 
 func (s *server) key(oid string) string {
@@ -866,4 +870,115 @@ func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (s *server) dealWithGithubAuthError(userInRepo auth.UserInRepo, w http.ResponseWriter, r *http.Request) error {
+	var err error
+	if username, password, ok := r.BasicAuth(); ok {
+		userInRepo.Username = username
+		userInRepo.Password = password
+
+		if !validatecfg.usernameRegexp.MatchString(userInRepo.Username) ||
+			!validatecfg.passwordRegexp.MatchString(userInRepo.Password) {
+			w.WriteHeader(http.StatusBadRequest)
+			must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+				Message: "invalid username or password format",
+			}))
+			return errors.New("invalid username or password format")
+		}
+		err = s.isGithubAuthorized(userInRepo)
+	} else if authToken := r.Header.Get("Authorization"); authToken != "" {
+		err = auth.VerifySSHAuthToken(authToken, userInRepo)
+	} else {
+		err = errors.New("unauthorized: cannot get password")
+	}
+	if err != nil {
+		v := err.Error()
+		switch {
+		case strings.HasPrefix(v, "unauthorized") || strings.HasPrefix(v, "not_found"):
+			w.WriteHeader(401)
+		case strings.HasPrefix(v, "forbidden"):
+			w.WriteHeader(403)
+		default:
+			w.WriteHeader(500)
+		}
+		w.Header().Set("LFS-Authenticate", `Basic realm="Git LFS"`)
+		must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+			Message: v,
+		}))
+		return err
+	}
+	return nil
+}
+
+func (s *server) handleGithubBatch(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(contentType, "application/vnd.git-lfs+json")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	var req batch.Request
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+			Message: "could not parse request",
+			DocURL:  "https://github.com/git-lfs/git-lfs/blob/v2.12.0/docs/api/batch.md#requests",
+		}))
+		return
+	}
+
+	var userInRepo auth.UserInRepo
+	userInRepo.Operation = req.Operation
+	userInRepo.Owner = chi.URLParam(r, "owner")
+	userInRepo.Repo = chi.URLParam(r, "repo")
+
+	if !validatecfg.ownerRegexp.MatchString(userInRepo.Owner) || !validatecfg.reponameRegexp.MatchString(userInRepo.Repo) {
+		w.WriteHeader(http.StatusBadRequest)
+		must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+			Message: "invalid owner or reponame format",
+		}))
+		return
+	}
+
+	if err := s.dealWithGithubAuthError(userInRepo, w, r); err != nil {
+		return
+	}
+
+	resp := s.handleRequestObject(req)
+
+	addGithubMetaData(req, w, userInRepo)
+
+	must(json.NewEncoder(w).Encode(resp))
+}
+
+func addGithubMetaData(req batch.Request, w http.ResponseWriter, userInRepo auth.UserInRepo) {
+	if req.Operation != "upload" {
+		return
+	}
+	for _, object := range req.Objects {
+		lfsObj := db.LfsObj{
+			Repo:     userInRepo.Repo,
+			Owner:    userInRepo.Owner,
+			Oid:      object.OID,
+			Size:     object.Size,
+			Exist:    2,
+			Platform: "github",
+			Operator: userInRepo.Username,
+		}
+		if err := db.InsertLFSObj(lfsObj); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			must(json.NewEncoder(w).Encode(batch.ErrorResponse{
+				Message: "failed to insert metadata",
+			}))
+			return
+		}
+		logrus.Infof("insert github lfsobj succeed")
+	}
+	time.AfterFunc(10*time.Minute, func() {
+		defer func() {
+			if err := recover(); err != nil {
+				logrus.Errorf("checkRepoOidName panic: %v", err)
+			}
+		}()
+		checkRepoOidName(userInRepo)
+	})
 }

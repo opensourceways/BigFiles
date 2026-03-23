@@ -26,6 +26,16 @@
 
 <!-- 以下为实际记录，按时间倒序排列 -->
 
+### 2026-03-23 feat：新增 /github/{owner}/{repo}/objects/batch 路由及处理器
+
+- **模式**: feat
+- **修改意图**: 实现 Task 5 & Task 6（TDD），为 GitHub 平台添加独立的 LFS batch 接口，支持 isGithubAuthorized 认证、元数据写入及异步 OID 文件名检查
+- **归档提示词**: 内联任务（Task 5 & Task 6）
+- **核心改动**:
+  - `server/server.go`: Options/server struct 追加 IsGithubAuthorized/isGithubAuthorized 字段；New() 注册 `/github/{owner}/{repo}/objects/batch` 路由；新增 dealWithGithubAuthError、handleGithubBatch、addGithubMetaData 三个方法
+  - `server/server_test.go`: 追加 githubBatchUrlPath 常量及 TestHandleGithubBatch 测试（TDD 红→绿验证通过）
+- **自验证**: `go build ./server/...` 编译通过；`go test ./server/... -v` 全部 PASS（含新增 TestHandleGithubBatch 2/2）
+
 ### 2026-03-23 docs：AI 开发规范化全量初始化配置
 
 - **模式**: docs

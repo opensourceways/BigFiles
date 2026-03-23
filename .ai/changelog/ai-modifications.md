@@ -26,6 +26,18 @@
 
 <!-- 以下为实际记录，按时间倒序排列 -->
 
+### 2026-03-23 feat：新增 GitHub LFS Batch 接口（server + main）
+
+- **模式**: feat
+- **修改意图**: 完成 GitHub LFS batch 接口的 server 层路由注册和 main.go 接入，实现完整的 GitHub 平台 LFS 支持
+- **归档提示词**: `.ai/prompts/prompt-feat-20260323.md`
+- **核心改动**:
+  - `server/server.go`: 新增 handleGithubBatch、dealWithGithubAuthError、addGithubMetaData，注册 /github/{owner}/{repo}/objects/batch 路由
+  - `server/server_test.go`: 新增 TestHandleGithubBatch 测试
+  - `config/config.go`: 新增 DefaultGithubToken 字段
+  - `main.go`: 传入 IsGithubAuthorized: auth.GithubAuth()
+- **自验证**: go test ./... 全部 PASS，go vet ./... 无报错
+
 ### 2026-03-23 feat：新增 /github/{owner}/{repo}/objects/batch 路由及处理器
 
 - **模式**: feat

@@ -26,30 +26,41 @@
 
 ### 规则 2：接收开发需求时自动生成提示词
 
-当用户提出任何开发、测试、重构、集成等任务时，AI Agent **必须**：
+当用户提出任何开发、测试、重构、集成等任务时，AI Agent **必须按顺序执行以下全部步骤**（Superpowers 技能与项目技能**并列强制**，不可互相替代）：
 
 1. **自动分析需求类型**
    - 识别任务类型（development、testing、architecture、integration 等）
    - 评估任务复杂度（简单/中等/复杂）
 
-2. **自动生成标准化提示词**（无需用户请求）
-   - 使用 task-prompt-generator 的模板结构
+2. **调用 `superpowers:brainstorming`**（已安装 Superpowers 时必须调用）
+   - 探索需求意图、设计方案和潜在风险
+   - ⚠️ 此步骤**不能替代**下一步的 task-prompt-generator
+
+3. **调用 `task-prompt-generator` 生成标准化提示词**（必须，无论是否已调用 brainstorming）
    - 包含：需求描述、项目上下文、相关技能、期望输出、质量要求、工作流程
    - 准备文件名：`.ai/prompts/prompt-{type}-{YYYYMMDD}.md`
 
-3. **展示提示词并请求确认**
+4. **展示提示词并请求确认**
    - 向用户展示生成的提示词内容（简要版本）
    - 询问："我已准备好提示词，是否需要修改？确认后我将开始开发。"
    - 用户确认后才创建文件并开始开发
+
+> ⚠️ **禁止行为**：执行完 `superpowers:brainstorming` 后直接进入开发，跳过 `task-prompt-generator`。两个步骤必须都执行。（来源：LL-005）
 
 ### 规则 3：开发过程中主动检查工作流程
 
 在开发过程中，AI Agent **必须**在以下节点自动执行检查：
 
-1. **编写测试前**：确认已理解需求和架构
-2. **实现代码前**：确认测试已编写
+1. **编写测试前**：确认已理解需求和架构；调用 `superpowers:test-driven-development` + `bigfiles-unit-test`
+2. **实现代码前**：确认测试已编写且处于失败状态（Red 阶段）
 3. **修复 Bug 后**：确认已按规则 6 更新 `.ai/lessons-learned.md`
-4. **提交代码前**：确认修改记录已更新
+4. **提交代码前**（以下步骤**全部必须执行**，缺一不可）：
+   - 调用 `superpowers:verification-before-completion` 实际运行 `go test ./...`、`golangci-lint run`、`go build ./...` 并确认输出
+   - 工具链全部通过后，**必须调用 `code-review-validation`** 触发 Reviewer Agent 独立审查
+   - Reviewer Agent 审查结论为 **Pass** 后才允许继续提交；**Needs Revision** 时停止并返回步骤 1 修复
+   - 确认修改记录已更新（`.ai/changelog/ai-modifications.md` 含今天日期）
+
+> ⚠️ **禁止行为**：跳过 `code-review-validation` 直接提交代码，或仅凭记忆声称测试已通过而不实际运行命令。（来源：LL-005）
 
 ### 规则 4：提交前自动验证
 

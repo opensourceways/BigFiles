@@ -6,6 +6,24 @@
 
 set -e
 
+# 补充 Go 工具链路径（Git Bash 等环境下 PATH 可能不含 go）
+if ! command -v go &>/dev/null; then
+    # 1. 优先使用标准环境变量
+    # 2. Windows 默认安装路径 /c/Program Files/Go/bin
+    # 3. macOS/Linux 标准路径 /usr/local/go/bin
+    for candidate in \
+        "${GOROOT}/bin" \
+        "${GOPATH}/bin" \
+        "${HOME}/go/bin" \
+        "/c/Program Files/Go/bin" \
+        "/usr/local/go/bin"; do
+        if [ -n "$candidate" ] && { [ -f "$candidate/go.exe" ] || [ -f "$candidate/go" ]; }; then
+            export PATH="$candidate:$PATH"
+            break
+        fi
+    done
+fi
+
 echo "🔍 Running pre-push checks..."
 
 # 颜色定义

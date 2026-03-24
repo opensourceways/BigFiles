@@ -33,25 +33,40 @@
 
 ---
 
+## 技能加载方式说明
+
+本项目的技能分为两种加载方式：
+
+| 加载方式 | 机制 | 适用场景 |
+|---------|------|---------|
+| **自动加载**（`@` 引入） | CLAUDE.md 末尾通过 `@路径` 引用，会话启动时自动注入上下文 | 每次开发任务都必须用到的核心流程技能 |
+| **按需读取** | agent 根据 CLAUDE.md 规则主动用 Read 工具读取 | 体积较大的参考文档、一次性工具 |
+
+---
+
 ## 核心通用技能（来自 ai-standardization-kit）
 
 #### 1. project-init
 - **路径：** `.ai/skills/project-init/`
+- **加载方式：** 按需读取（规则 1 指示 agent 在会话开始时读取）
 - **描述：** 项目初始化配置加载器，自动加载所有项目配置文件
 - **文件：** `skill.md` · `package.json`
 
-#### 2. task-prompt-generator
+#### 2. task-prompt-generator ⚡ 自动加载
 - **路径：** `.ai/skills/task-prompt-generator/`
+- **加载方式：** `@` 自动加载（CLAUDE.md 引入，会话启动即在上下文）
 - **描述：** 帮助用户生成标准化的任务提示词，定义任务工作流和步骤，确保提供给 Agent 的提示词一致且符合项目标准
 - **文件：** `skill.md` · `package.json`
 
-#### 3. workflow-enforcer
+#### 3. workflow-enforcer ⚡ 自动加载
 - **路径：** `.ai/skills/workflow-enforcer/`
+- **加载方式：** `@` 自动加载（CLAUDE.md 引入，会话启动即在上下文）
 - **描述：** 强制执行项目的开发工作流程规范，确保所有使用 Agent 进行开发的人员遵循标准化流程
 - **文件：** `skill.md` · `package.json`
 
-#### 4. code-review-validation
+#### 4. code-review-validation ⚡ 自动加载
 - **路径：** `.ai/skills/code-review-validation/`
+- **加载方式：** `@` 自动加载（CLAUDE.md 引入，会话启动即在上下文）
 - **描述：** 触发独立 Reviewer Agent（角色R）对 coding agent 产出进行五维度对抗验证（语义对齐、测试真实性、边界覆盖、架构合规、反模式合规）
 - **文件：** `skill.md` · `package.json`
 - **角色定义：** `.ai/agents/roles/code-reviewer.md`
@@ -65,6 +80,7 @@
 
 #### 5. bigfiles-code-style
 - **路径：** `.ai/skills/bigfiles-code-style/`
+- **加载方式：** 按需读取（规则 1 指示 agent 在会话开始时读取；体积 320 行，不自动加载）
 - **描述：** BigFiles 项目的代码风格和安全约束规范，定义编码标准、安全最佳实践和开发约束
 - **文件：** `skill.md` · `package.json`
 
@@ -150,5 +166,5 @@
 **注意**：当 skills 发生变动时，请手动同步更新本文件的技能列表和统计数字。
 
 **创建时间**：2026-03-23
-**最后更新**：2026-03-23
+**最后更新**：2026-03-24
 **维护团队**：项目开发组

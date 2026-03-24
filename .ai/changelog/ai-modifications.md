@@ -26,6 +26,20 @@
 
 <!-- 以下为实际记录，按时间倒序排列 -->
 
+### 2026-03-24 chore：提交 AI 开发规范化基础设施文件
+
+- **模式**: chore
+- **修改意图**: 将 AI 开发规范化初始化时生成的 .ai/ 目录、CLAUDE.md、AGENTS.md、Git Hooks、GitHub Actions 等基础设施文件纳入版本控制
+- **归档提示词**: `.ai/prompts/prompt-chore-20260324.md`
+- **核心改动**:
+  - `.ai/`: 新增完整 AI 目录结构（architect、agents、skills、workflow、prompts 等）
+  - `CLAUDE.md`: AI Agent 行为宪法（6 条强制规则）
+  - `AGENTS.md`: 技能文档
+  - `.githooks/`: commit-msg、post-merge、pre-push hooks
+  - `.github/workflows/workflow-validation.yml`: CI 工作流
+  - `.gitignore`: 新增 coverage.out
+- **自验证**: git status 确认文件完整
+
 ### 2026-03-23 feat：新增 GitHub LFS Batch 接口（server + main）
 
 - **模式**: feat

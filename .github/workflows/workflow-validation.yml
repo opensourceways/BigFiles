@@ -1,0 +1,121 @@
+# GitHub Actions CI - 技术门禁
+# 职责：仅验证技术指标（测试 / 风格 / 构建）
+# 过程约束（TDD 流程、提示词归档、审查报告）由 AI Agent 负责，不在此处检查
+#
+# 来源：ai-standardization-kit/github-workflows/workflow-validation.yml
+# 适配：BigFiles (Go 1.24.0)
+
+name: AI Workflow Validation
+
+on:
+  pull_request:
+    branches:
+      - master
+      - main
+      - 'release/**'
+
+jobs:
+  # ============================================================================
+  # 技术门禁 1：测试验证
+  # ============================================================================
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Generate coverage report
+        run: go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
+        continue-on-error: true
+
+  # ============================================================================
+  # 技术门禁 2：代码风格检查
+  # ============================================================================
+  code-style:
+    name: Code Style Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  # ============================================================================
+  # 技术门禁 3：构建验证
+  # ============================================================================
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: [test, code-style]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Build project
+        run: go build ./...
+
+      - name: Go vet
+        run: go vet ./...
+
+  # ============================================================================
+  # 汇总报告
+  # ============================================================================
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [test, code-style, build]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## CI 技术门禁结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 检查项 | 结果 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.test.result }}" = "success" ]; then
+            echo "| ✅ 测试通过 | 通过 |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| ❌ 测试失败 | 失败 |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.code-style.result }}" = "success" ]; then
+            echo "| ✅ 代码风格 | 通过 |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| ❌ 代码风格 | 失败 |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.build.result }}" = "success" ]; then
+            echo "| ✅ 构建验证 | 通过 |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| ❌ 构建失败 | 失败 |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **注意**：CI 仅验证技术指标。TDD 流程合规、提示词归档、审查报告等过程要求由 AI Agent 在提交前自动执行。" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,85 @@
+#!/bin/bash
+
+# Commit-msg Hook（通用模板）
+# 提交信息格式验证 - Conventional Commits 规范
+# 由 ai-standardization-kit/git-hooks-infrastructure/install-hooks.sh 安装
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+COMMIT_MSG_FILE=$1
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+echo "🔍 Checking commit message format..."
+
+# ============================================================================
+# 检查提交信息格式（Conventional Commits）
+# ============================================================================
+
+# 格式：<type>(<scope>): <subject>
+# 示例：feat(auth): add OAuth2 login
+#       fix(api): handle null response from upstream
+
+# 1. 检查是否为空
+if [ -z "$COMMIT_MSG" ]; then
+    echo -e "${RED}✗${NC} 提交信息不能为空"
+    exit 1
+fi
+
+# 2. 跳过合并提交和 Rebase 临时提交
+if echo "$COMMIT_MSG" | grep -qE '^(Merge|Revert|fixup!|squash!)'; then
+    echo -e "${GREEN}✓${NC} 合并/特殊提交，跳过格式检查"
+    exit 0
+fi
+
+# 3. 检查格式
+VALID_TYPES="feat|fix|refactor|test|docs|chore|style|perf|ci|build|revert"
+if ! echo "$COMMIT_MSG" | grep -qE "^(${VALID_TYPES})(\(.+\))?!?: .+"; then
+    echo -e "${RED}✗${NC} 提交信息格式不正确"
+    echo ""
+    echo "正确的格式："
+    echo "  <type>(<scope>): <subject>"
+    echo ""
+    echo "支持的类型（type）："
+    echo "  feat       - 新功能"
+    echo "  fix        - 问题修复"
+    echo "  refactor   - 代码重构"
+    echo "  test       - 测试相关"
+    echo "  docs       - 文档更新"
+    echo "  chore      - 构建、依赖、工具等"
+    echo "  style      - 代码风格（不影响逻辑）"
+    echo "  perf       - 性能优化"
+    echo "  ci         - CI/CD 相关"
+    echo "  build      - 构建系统相关"
+    echo "  revert     - 回滚提交"
+    echo ""
+    echo "示例："
+    echo "  feat(auth): add OAuth2 login support"
+    echo "  fix(api): handle null response from upstream"
+    echo "  docs(readme): update installation guide"
+    echo "  chore(deps): upgrade spring-boot to 3.2.9"
+    echo ""
+    echo "Breaking Change 示例（加 !）："
+    echo "  feat(api)!: change response format to v2"
+    echo ""
+    exit 1
+fi
+
+# 4. 检查主题长度（不超过72字符）
+SUBJECT=$(echo "$COMMIT_MSG" | head -n1)
+SUBJECT_LENGTH=${#SUBJECT}
+if [ $SUBJECT_LENGTH -gt 72 ]; then
+    echo -e "${YELLOW}⚠${NC}  提交信息主题过长（${SUBJECT_LENGTH} 字符，建议 ≤72 字符）"
+fi
+
+# 5. 检查是否有正文（建议）
+LINES=$(echo "$COMMIT_MSG" | wc -l)
+if [ $LINES -lt 2 ]; then
+    echo -e "${YELLOW}⚠${NC}  建议添加提交信息正文说明修改原因（Why）"
+fi
+
+echo -e "${GREEN}✓${NC} 提交信息格式正确"
+exit 0

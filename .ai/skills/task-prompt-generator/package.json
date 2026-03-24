@@ -1,0 +1,17 @@
+{
+  "name": "task-prompt-generator",
+  "version": "1.0.0",
+  "description": "Standardized task prompt generation with archiving protocol",
+  "main": "skill.md",
+  "auto_load": false,
+  "config": {
+    "archive_path": ".ai/prompts/",
+    "filename_pattern": "prompt-{type}-{YYYYMMDD}.md",
+    "required_sections": [
+      "TASK",
+      "CONTEXT",
+      "OUTPUT_REQUIREMENTS",
+      "CONSTRAINTS"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "bigfiles-code-style",
+  "version": "1.0.0",
+  "description": "BigFiles 项目代码风格和安全约束规范（Go 语言，定制版）",
+  "keywords": ["code-style", "security", "governance", "golang"],
+  "auto_load": false,
+  "triggers": ["file_write", "code_review"],
+  "config": {
+    "categories": ["governance", "quality-assurance"],
+    "modes": ["code", "orchestrator"],
+    "priority": 15,
+    "required_commands": {
+      "lint": "golangci-lint run",
+      "verify": "go vet ./... && golangci-lint run && go test ./..."
+    }
+  },
+  "engines": {
+    "go": ">=1.24.0"
+  }
+}

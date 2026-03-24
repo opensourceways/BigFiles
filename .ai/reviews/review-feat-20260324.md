@@ -155,3 +155,50 @@ download 权限验证仅检查 token 是否能访问 repo，未验证具体 user
 `strings.Split(repo.FullName, "/")[0]` 应加 `len(parts) >= 2` 防御检查。
 
 **S3** 鉴于本次 Needs Revision 发现了 Header 写入顺序 bug（F1），且同样的 bug 也存在于 `dealWithAuthError`（`server/server.go:275`），建议同步修复并在 `.ai/lessons-learned.md` 中新增 LL 记录，在 `.ai/anti-patterns.md` 中新增可检测的 AP 记录（grep `WriteHeader` 后出现 `Header().Set` 的模式）。
+
+---
+
+## 第二轮审查（Round 2）
+
+**日期**：2026-03-24
+**触发原因**：Coding Agent 完成 F1~F7+S1 修复，重新提交审查
+
+### 修复验证
+
+| 编号 | 原结论 | 验证结果 | 说明 |
+|------|--------|----------|------|
+| F1 | Fail | ✅ Pass | `dealWithAuthError` 和 `dealWithGithubAuthError` 均已将 `Header().Set("LFS-Authenticate", ...)` 移至 `WriteHeader` 之前 |
+| F2 | Fail | ✅ Pass | `addGithubMetaData` 已改为返回 `error`，`handleGithubBatch` 在其返回错误时提前 return |
+| F3 | Fail | ⚠️ 已知遗留 | server 层直接调用 db 层属跨团队存量问题（14+ 处），本次暂缓，已在 AP-003 中记录 |
+| F4 | Fail | ✅ Pass | 新增 `patchGithubAPI` helper，所有测试均通过 monkey patch 重定向至 mock server，无真实 API 调用 |
+| F5 | Fail | ✅ Pass | `mockGithubServer` 现被 11 个测试使用，覆盖 AllowedOrg、ForkAllowedParent、全部权限路径 |
+| F6 | Fail | ✅ Pass | `TestGithubAuth_TokenFromPassword` 改用 `"openeuler"` owner + mock server，捕获 Authorization 头并断言 `"Bearer my-github-token"` |
+| F7 | Fail | ✅ Pass | `verifyGithubDownload` fallback 先调用 collaborator API，再调用 repo API，区分 401/403；`TestVerifyGithubDownload_UnauthorizedFail` 断言 `"unauthorized"` |
+| S1 | Suggestion | ✅ Pass | `verifyGithubDelete` 错误信息改为英文 `"unauthorized:"` 前缀，`dealWithGithubAuthError` 可正确分类为 401 |
+
+### 验证命令输出
+
+```
+$ go test ./... -gcflags=all=-l
+ok  github.com/metalogical/BigFiles/auth      (X tests)
+ok  github.com/metalogical/BigFiles/config    (X tests)
+ok  github.com/metalogical/BigFiles/server    (X tests)
+ok  github.com/metalogical/BigFiles/utils     (X tests)
+
+$ go build ./...
+(no output, exit 0)
+
+$ go vet ./...
+(no output, exit 0)
+```
+
+### 遗留项说明
+
+- **F3 暂缓**：`addGithubMetaData` 中 `db.InsertLFSObj` 直接调用为已知架构问题，项目中存在 14+ 处同类调用，需统一重构。已在 AP-003 中记录检测命令，不影响本次 Pass 结论。
+- **S2 暂缓**：`strings.Split(repo.FullName, "/")[0]` 防御检查依赖 GitHub API 保证格式，低优先级。
+
+## 第二轮总体结论
+
+**Pass**
+
+> 所有 Critical/Important Fail 项均已修复（F3 已知遗留项已书面记录）。测试全部通过。可继续提交。

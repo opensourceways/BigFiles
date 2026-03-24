@@ -145,21 +145,37 @@ func verifyGithubUpload(userInRepo UserInRepo, headers http.Header) error {
 }
 
 func verifyGithubDownload(userInRepo UserInRepo, headers http.Header) error {
-	path := fmt.Sprintf("https://api.github.com/repos/%s/%s",
-		userInRepo.Owner, userInRepo.Repo)
-	repo := new(githubRepo)
-	if err := getParsedResponse("GET", path, headers, nil, repo); err != nil {
-		msg := fmt.Sprintf("forbidden: user %s has no permission to download", userInRepo.Username)
-		logrus.Error(fmt.Sprintf(formatLogString, verifyLog, msg))
-		return errors.New(msg)
+	perm, err := getGithubCollaboratorPermission(userInRepo, headers)
+	if err != nil {
+		// collaborator API requires write/maintain/admin; for public repos it returns 404
+		// fall back to checking repo accessibility
+		path := fmt.Sprintf("https://api.github.com/repos/%s/%s",
+			userInRepo.Owner, userInRepo.Repo)
+		repo := new(githubRepo)
+		if repoErr := getParsedResponse("GET", path, headers, nil, repo); repoErr != nil {
+			// propagate unauthorized as-is so dealWithGithubAuthError returns 401
+			if strings.HasPrefix(repoErr.Error(), "unauthorized") {
+				return repoErr
+			}
+			msg := fmt.Sprintf("forbidden: user %s has no permission to download", userInRepo.Username)
+			logrus.Error(fmt.Sprintf(formatLogString, verifyLog, msg))
+			return errors.New(msg)
+		}
+		return nil
 	}
-	return nil
+	if perm.Permission == "admin" || perm.Permission == "write" || perm.Permission == "read" {
+		return nil
+	}
+	msg := fmt.Sprintf("forbidden: user %s has no permission to download from %s/%s",
+		userInRepo.Username, userInRepo.Owner, userInRepo.Repo)
+	logrus.Error(fmt.Sprintf(formatLogString, verifyLog, msg))
+	return errors.New(msg)
 }
 
 func verifyGithubDelete(userInRepo UserInRepo, headers http.Header) error {
 	perm, err := getGithubCollaboratorPermission(userInRepo, headers)
 	if err != nil {
-		msg := err.Error() + ": 删除权限校验失败，用户使用的 GitHub token 错误或已过期，请重新登录"
+		msg := err.Error() + ": unauthorized: github token is invalid or expired, please re-authenticate"
 		return errors.New(msg)
 	}
 	if perm.Permission == "admin" {

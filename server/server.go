@@ -264,6 +264,7 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 	}
 	if err != nil {
 		v := err.Error()
+		w.Header().Set("LFS-Authenticate", `Basic realm="Git LFS"`)
 		switch {
 		case strings.HasPrefix(v, "unauthorized") || strings.HasPrefix(v, "not_found"):
 			w.WriteHeader(401)
@@ -272,7 +273,6 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 		default:
 			w.WriteHeader(500)
 		}
-		w.Header().Set("LFS-Authenticate", `Basic realm="Git LFS"`)
 		must(json.NewEncoder(w).Encode(batch.ErrorResponse{
 			Message: v,
 		}))
@@ -894,6 +894,7 @@ func (s *server) dealWithGithubAuthError(userInRepo auth.UserInRepo, w http.Resp
 	}
 	if err != nil {
 		v := err.Error()
+		w.Header().Set("LFS-Authenticate", `Basic realm="Git LFS"`)
 		switch {
 		case strings.HasPrefix(v, "unauthorized") || strings.HasPrefix(v, "not_found"):
 			w.WriteHeader(401)
@@ -902,7 +903,6 @@ func (s *server) dealWithGithubAuthError(userInRepo auth.UserInRepo, w http.Resp
 		default:
 			w.WriteHeader(500)
 		}
-		w.Header().Set("LFS-Authenticate", `Basic realm="Git LFS"`)
 		must(json.NewEncoder(w).Encode(batch.ErrorResponse{
 			Message: v,
 		}))
@@ -945,14 +945,16 @@ func (s *server) handleGithubBatch(w http.ResponseWriter, r *http.Request) {
 
 	resp := s.handleRequestObject(req)
 
-	addGithubMetaData(req, w, userInRepo)
+	if err := addGithubMetaData(req, w, userInRepo); err != nil {
+		return
+	}
 
 	must(json.NewEncoder(w).Encode(resp))
 }
 
-func addGithubMetaData(req batch.Request, w http.ResponseWriter, userInRepo auth.UserInRepo) {
+func addGithubMetaData(req batch.Request, w http.ResponseWriter, userInRepo auth.UserInRepo) error {
 	if req.Operation != "upload" {
-		return
+		return nil
 	}
 	for _, object := range req.Objects {
 		lfsObj := db.LfsObj{
@@ -969,7 +971,7 @@ func addGithubMetaData(req batch.Request, w http.ResponseWriter, userInRepo auth
 			must(json.NewEncoder(w).Encode(batch.ErrorResponse{
 				Message: "failed to insert metadata",
 			}))
-			return
+			return err
 		}
 		logrus.Infof("insert github lfsobj succeed")
 	}
@@ -981,4 +983,5 @@ func addGithubMetaData(req batch.Request, w http.ResponseWriter, userInRepo auth
 		}()
 		checkRepoOidName(userInRepo)
 	})
+	return nil
 }

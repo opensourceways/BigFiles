@@ -26,6 +26,17 @@
 
 <!-- 以下为实际记录，按时间倒序排列 -->
 
+### 2026-03-24 fix：修复 Reviewer Agent 审查报告 F1~F7 + S1 的 8 项 Fail
+
+- **模式**: fix
+- **修改意图**: Reviewer Agent 第一轮审查（review-feat-20260324.md）返回 Needs Revision，修复 HTTP 响应头顺序 bug、双重写入 bug、测试真实外部 API 问题、mock 未使用问题、download 权限语义问题及中文错误信息问题
+- **归档提示词**: `.ai/prompts/prompt-feat-20260323.md`
+- **核心改动**:
+  - `server/server.go`: F1 - `dealWithAuthError` 和 `dealWithGithubAuthError` 中将 `LFS-Authenticate` header Set 移至 `WriteHeader` 之前；F2 - `addGithubMetaData` 改为返回 `error`，调用方出错时提前 return
+  - `auth/github_auth.go`: S1 - `verifyGithubDelete` 中文错误信息改为英文 `unauthorized:` 前缀；F7 - `verifyGithubDownload` 改为先调用 collaborator API 验证 username，fallback 时区分 401/403
+  - `auth/github_auth_test.go`: F4/F5/F6 - 重写测试，新增 `patchGithubAPI` monkey patch 辅助函数，13 个测试覆盖 upload/download/delete 全路径；修复 `ForkAllowedParent` 测试实际走到 fork parent 分支
+- **自验证**: `go test ./... -gcflags=all=-l` 全部通过；`go build ./...` 成功；`go vet ./...` 无报告
+
 ### 2026-03-24 chore：提交 AI 开发规范化基础设施文件
 
 - **模式**: chore

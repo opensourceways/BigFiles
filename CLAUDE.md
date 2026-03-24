@@ -289,3 +289,13 @@ BigFiles/
 
 **最后更新**：2026-03-23
 **维护团队**：项目开发组
+
+---
+
+## 项目技能（自动加载）
+
+> 以下技能在每次会话启动时自动注入上下文，agent 无需主动读取即可执行。
+
+@.ai/skills/task-prompt-generator/skill.md
+@.ai/skills/code-review-validation/skill.md
+@.ai/skills/workflow-enforcer/skill.md

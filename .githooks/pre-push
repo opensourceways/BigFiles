@@ -15,6 +15,7 @@ if ! command -v go &>/dev/null; then
         "${GOROOT}/bin" \
         "${GOPATH}/bin" \
         "${HOME}/go/bin" \
+        ${HOME}/sdk/go*/bin \
         "/c/Program Files/Go/bin" \
         "/usr/local/go/bin"; do
         if [ -n "$candidate" ] && { [ -f "$candidate/go.exe" ] || [ -f "$candidate/go" ]; }; then

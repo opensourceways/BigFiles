@@ -552,7 +552,7 @@ func parseOutputFile(outputFile string) (map[string]FileInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid file path: %w", err)
 	}
-	data, err := os.ReadFile(absPath)
+	data, err := os.ReadFile(absPath) // #nosec G304 -- absPath validated with directory boundary check above
 	if err != nil {
 		return nil, fmt.Errorf("读取输出文件失败: %w", err)
 	}

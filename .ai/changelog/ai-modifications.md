@@ -94,3 +94,19 @@
   - `auth/github_auth.go`: 新建 GitHub 认证模块，包含 GithubAuth、CheckGithubRepoOwner、VerifyGithubUser 及辅助函数
   - `auth/github_auth_test.go`: 新建测试套件，覆盖 org 白名单、forbidden org、token 解析、未知操作等场景
 - **自验证**: `go test ./auth/... -v` 全部通过（TestGithubAuth 4/4，全 auth 套件 PASS）
+
+### 2026-03-26 fix：修复 gosec 安全扫描问题并补充测试
+
+- **模式**: fix + test
+- **修改意图**: 修复 gosec 静态分析检测到的 G706（日志注入）和 G304（文件路径遍历）安全问题；修复 PowerShell CI 脚本中的参数解析 bug；补充 auth/gitee.go 和 server/server.go 的单元测试以提升覆盖率
+- **归档提示词**: `.ai/prompts/prompt-fix-20260326.md`
+- **核心改动**:
+  - `server/server.go`: 将 log.Printf 中 `%s` 改为 `%q`，添加 `#nosec G706` 注释（4 处）
+  - `utils/util.go`: 为 os.ReadFile 添加 `#nosec G304` 注释（CLI 可信参数）
+  - `auth/gitee.go`: 为 os.ReadFile 添加 `#nosec G304` 注释（路径已做边界校验）
+  - `.ai/skills/local-ci-go/scripts/run_tests.ps1`: 修复 5 处 PowerShell 参数解析 bug
+  - `.ai/skills/local-ci-go/scripts/run_security.ps1`: 修复 ErrorActionPreference 问题
+  - `.ai/skills/local-ci-go/scripts/run_gitleaks.ps1`: 修复 ErrorActionPreference 问题
+  - `auth/gitee_test.go`: 新增 TestVerifyUserDelete/Upload/Download、TestResolveScriptPath、TestCreateTempOutputFile、TestParseOutputFile、TestGetAccountManageToken、TestGetOpenEulerUserInfo、TestGetLFSMapping 等测试
+  - `server/server_test.go`: 新增 TestApplySearchFilter 测试
+- **自验证**: `go test ./auth/... ./server/... -coverprofile=coverage.out` 全部通过；gosec 输出 Issues: 0, Nosec: 6

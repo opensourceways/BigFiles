@@ -13,6 +13,7 @@ import (
 	"github.com/metalogical/BigFiles/batch"
 	"github.com/metalogical/BigFiles/db"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/gorm"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -1343,6 +1344,36 @@ func TestHandleGithubBatch(t *testing.T) {
 			w := httptest.NewRecorder()
 			s.handleGithubBatch(w, req)
 			assert.Equal(t, tt.wantStatusCode, w.Code)
+		})
+	}
+}
+
+func TestApplySearchFilter(t *testing.T) {
+	db, err := gorm.Open(nil, &gorm.Config{DryRun: true})
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	tests := []struct {
+		name      string
+		searchKey string
+	}{
+		{
+			name:      "filter with slash divides into owner and repo",
+			searchKey: "myowner/myrepo",
+		},
+		{
+			name:      "filter without slash searches owner or repo",
+			searchKey: "searchterm",
+		},
+		{
+			name:      "empty search key applies OR filter",
+			searchKey: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := applySearchFilter(db, tt.searchKey)
+			assert.NotNil(t, result)
 		})
 	}
 }

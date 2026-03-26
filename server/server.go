@@ -812,14 +812,14 @@ func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Cookie 'yg' not found: %v", err)
 	} else {
-		log.Printf("Cookie 'yg': %s", ygCookie.Value)
+		log.Printf("Cookie 'yg': %q", ygCookie.Value) // #nosec G706 -- value is quoted with %q, control chars escaped
 	}
 
 	utCookie, err := r.Cookie("_U_T_")
 	if err != nil {
 		log.Printf("Cookie 'ut' not found: %v", err)
 	} else {
-		log.Printf("Cookie 'ut': %s", utCookie.Value)
+		log.Printf("Cookie 'ut': %q", utCookie.Value) // #nosec G706 -- value is quoted with %q, control chars escaped
 	}
 
 	userInRepo := auth.UserInRepo{Repo: repo, Owner: owner, Operation: "delete"}
@@ -845,7 +845,7 @@ func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			http.Error(w, "Object not found", http.StatusNotFound)
 		} else {
-			log.Printf("Error retrieving object with ID %s from repo %s of owner %s: %v", oid, repo, owner, err)
+			log.Printf("Error retrieving object with ID %q from repo %q of owner %q: %v", oid, repo, owner, err) // #nosec G706 -- URL params quoted with %q
 			http.Error(w, "Failed to retrieve object", http.StatusInternalServerError)
 		}
 		return
@@ -856,7 +856,7 @@ func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 		"exist":    0,
 		"Operator": deletedBy,
 	}).Error; err != nil {
-		log.Printf("Error marking object with ID %s as deleted in repo %s of owner %s: %v", oid, repo, owner, err)
+		log.Printf("Error marking object with ID %q as deleted in repo %q of owner %q: %v", oid, repo, owner, err) // #nosec G706 -- URL params quoted with %q
 		http.Error(w, "Failed to mark object as deleted", http.StatusInternalServerError)
 		return
 	}

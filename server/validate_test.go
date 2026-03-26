@@ -8,50 +8,59 @@ import (
 func TestInit(t *testing.T) {
 	tests := []struct {
 		name    string
-		args    config.ValidateConfig
+		args    *config.Config
 		wantErr bool
 	}{
 		{
 			name: "compile owner regexp failed",
-			args: config.ValidateConfig{
-				OwnerRegexp: `^[\\-?]$`,
+			args: &config.Config{
+				ValidateConfig: config.ValidateConfig{
+					OwnerRegexp: `^[\\-?]$`},
 			},
 			wantErr: true,
 		},
 		{
 			name: "compile repo regexp failed",
-			args: config.ValidateConfig{
-				OwnerRegexp:    `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
-				RepoNameRegexp: `^[\\-?]$`,
+			args: &config.Config{
+				ValidateConfig: config.ValidateConfig{
+					OwnerRegexp:    `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
+					RepoNameRegexp: `^[\\-?]$`,
+				},
 			},
 			wantErr: true,
 		},
 		{
 			name: "compile username regexp failed",
-			args: config.ValidateConfig{
-				OwnerRegexp:    `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
-				RepoNameRegexp: `^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`,
-				UsernameRegexp: `^[\\-?]$`,
+			args: &config.Config{
+				ValidateConfig: config.ValidateConfig{
+					OwnerRegexp:    `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
+					RepoNameRegexp: `^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`,
+					UsernameRegexp: `^[\\-?]$`,
+				},
 			},
 			wantErr: true,
 		},
 		{
 			name: "compile password regexp failed",
-			args: config.ValidateConfig{
-				OwnerRegexp:    `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
-				RepoNameRegexp: `^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`,
-				UsernameRegexp: `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
-				PasswordRegexp: `^[\\-?]$`,
+			args: &config.Config{
+				ValidateConfig: config.ValidateConfig{
+					OwnerRegexp:    `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
+					RepoNameRegexp: `^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`,
+					UsernameRegexp: `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
+					PasswordRegexp: `^[\\-?]$`,
+				},
 			},
 			wantErr: true,
 		},
 		{
 			name: "compile regexp success",
-			args: config.ValidateConfig{
-				OwnerRegexp:    `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
-				RepoNameRegexp: `^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`,
-				UsernameRegexp: `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
-				PasswordRegexp: `^[a-zA-Z0-9!@_#$%^&*()-=+,?.,]*$`,
+			args: &config.Config{
+				ValidateConfig: config.ValidateConfig{
+					OwnerRegexp:    `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
+					RepoNameRegexp: `^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`,
+					UsernameRegexp: `^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`,
+					PasswordRegexp: `^[a-zA-Z0-9!@_#$%^&*()-=+,?.,]*$`,
+				},
 			},
 			wantErr: false,
 		},

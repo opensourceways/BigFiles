@@ -170,6 +170,10 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func addMetaData(req batch.Request, w http.ResponseWriter, userInRepo auth.UserInRepo) {
+	platform := "gitee"
+	if gitCodeSwitch {
+		platform = "atomGit"
+	}
 	// 添加元数据
 	if req.Operation == "upload" {
 		for _, object := range req.Objects {
@@ -179,7 +183,7 @@ func addMetaData(req batch.Request, w http.ResponseWriter, userInRepo auth.UserI
 				Oid:      object.OID,
 				Size:     object.Size,
 				Exist:    2,                   // 默认设置为2
-				Platform: "gitee",             // 默认平台
+				Platform: platform,            // 默认平台
 				Operator: userInRepo.Username, // 操作人
 			}
 
@@ -500,8 +504,13 @@ func (s *server) getLfsFiles(owner, repo, platform string, page, limit int) ([]d
 	var files []db.LfsObj
 
 	query := db.Db.Model(&db.LfsObj{}).
-		Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).
-		Order("create_time DESC").
+		Where("owner = ? AND repo = ? AND exist = 1", owner, repo)
+
+	if platform != "" {
+		query = query.Where("platform = ?", platform)
+	}
+
+	query = query.Order("create_time DESC").
 		Limit(limit).
 		Offset((page - 1) * limit)
 
@@ -583,10 +592,15 @@ func checkOidFileName() {
 		logrus.Errorf("fetch repo list failed: %v", err)
 		return
 	}
+	token := giteeDefaultToken
+	if gitCodeSwitch {
+		token = atomGiteDefaultToken
+	}
 	for _, repo := range repoList {
 		userInRepo := auth.UserInRepo{
 			Repo:  repo.Repo,
-			Owner: repo.Owner}
+			Owner: repo.Owner,
+			Token: token}
 		logrus.Infof("checkOidFileName owner:%v repo:%v", repo.Owner, repo.Repo)
 		checkRepoOidName(userInRepo)
 

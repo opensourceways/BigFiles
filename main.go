@@ -61,7 +61,7 @@ func gatherOptions(fs *flag.FlagSet, args ...string) (options, error) {
 }
 
 func initConfig(cfg *config.Config) {
-	if err := server.Init(cfg.ValidateConfig); err != nil {
+	if err := server.Init(cfg); err != nil {
 		logrus.Errorf("load ValidateConfig, err:%s", err.Error())
 		return
 	}
@@ -128,8 +128,9 @@ func main() {
 		CdnDomain:       cfg.CdnDomain,
 		AccessKeyID:     cfg.ObsAccessKeyId,
 		S3Accelerate:    true,
-		IsAuthorized:    auth.GiteeAuth(),
-		SecretAccessKey: cfg.ObsSecretAccessKey,
+		IsAuthorized:       auth.GiteeAuth(),
+		IsGithubAuthorized: auth.GithubAuth(),
+		SecretAccessKey:    cfg.ObsSecretAccessKey,
 	})
 
 	go server.StartScheduledTask()

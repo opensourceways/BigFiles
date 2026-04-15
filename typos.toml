@@ -1,14 +1,14 @@
 [files]
 extend-exclude = [
-"*.yaml",
-"*.yml",
-"*.md",
-"*.sh",
-"*.tpl",
-"go.mod",
-"go.sum",
-"tests/",
-"api/",
+    "*.yaml",
+    "*.yml",
+    "*.md",
+    "*.sh",
+    "*.tpl",
+    "go.mod",
+    "go.sum",
+    "tests/",
+    "api/",
 ]
 ignore-hidden = true
 ignore-files = true
@@ -19,11 +19,8 @@ ignore-parent = true
 
 [default]
 locale = "en"
-extend-glob = []
-extend-ignore-identifiers = []
 extend-ignore-words-re = []
 extend-ignore-re = []
-
 [default.extend-identifiers]
 cann_version = "cann_version"
 CannVersion = "CannVersion"

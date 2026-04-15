@@ -22,11 +22,14 @@ var (
 	clientId              string
 	clientSecret          string
 	defaultToken          string
+	defaultGiteCodeToken  string
+	gitCodeSwitch         bool
+	defaultGithubToken    string
 	openEulerAccountParam batch.OpenEulerAccountParam
 )
 
 var (
-	allowedRepos        = []string{"openeuler", "src-openeuler", "lfs-org"}
+	allowedRepos        []string
 	uploadPermissions   = []string{"admin", "developer"}
 	downloadPermissions = []string{"admin", "developer", "read"}
 )
@@ -43,6 +46,7 @@ const (
 	contentType              = "Content-Type"
 	authorization            = "Authorization"
 	acceptEncoding           = "Accept-Encoding"
+	headerContentType        = "application/json;charset=UTF-8"
 	formatLogString          = "%s | %s"
 	openEulerGetUserInfo     = "/oneid/manager/personal/center/user"
 	appendPathAccessToken    = "?access_token="
@@ -101,7 +105,27 @@ func Init(cfg *config.Config) error {
 			return errors.New("default token required")
 		}
 	}
+	defaultGiteCodeToken = cfg.DefaultGitCodeToken
+	if defaultGiteCodeToken == "" {
+		defaultGiteCodeToken = os.Getenv("GITE_CODE_TOKEN")
+		if defaultGiteCodeToken == "" {
+			return errors.New("defaultGiteCode token required")
+		}
+	}
 
+	defaultGithubToken = cfg.DefaultGithubToken
+	if defaultGithubToken == "" {
+		defaultGithubToken = os.Getenv("DEFAULT_GITHUB_TOKEN")
+		if defaultGithubToken == "" {
+			return errors.New("default github token required")
+		}
+	}
+	gitCodeSwitch = cfg.GitCodeSwitch
+	if len(cfg.AllowedRepos) > 0 {
+		allowedRepos = cfg.AllowedRepos
+	} else {
+		allowedRepos = []string{"openeuler", "src-openeuler", "lfs-org", "openeuler-test"}
+	}
 	return nil
 }
 
@@ -133,7 +157,10 @@ func InitOpenEulerParam(cfg *config.Config) error {
 
 func GiteeAuth() func(UserInRepo) error {
 	return func(userInRepo UserInRepo) error {
-		if userInRepo.Password != "" {
+		if gitCodeSwitch {
+			userInRepo.Token = userInRepo.Password
+		}
+		if userInRepo.Password != "" && !gitCodeSwitch {
 			token, err := getToken(userInRepo.Username, userInRepo.Password)
 			if err != nil {
 				userInRepo.Token = userInRepo.Password
@@ -163,12 +190,29 @@ func CheckRepoOwner(userInRepo UserInRepo) (Repo, error) {
 	} else {
 		path += defaultToken
 	}
-	headers := http.Header{contentType: []string{"application/json;charset=UTF-8"}}
+	headers := http.Header{contentType: []string{headerContentType}}
 	repo := new(Repo)
 	err := getParsedResponse("GET", path, headers, nil, &repo)
-	if err != nil {
+	gitCodePath := fmt.Sprintf(
+		"https://api.gitcode.com/api/v5/repos/%s/%s%s",
+		userInRepo.Owner,
+		userInRepo.Repo,
+		appendPathAccessToken,
+	)
+	if userInRepo.Token != "" {
+		gitCodePath += userInRepo.Token
+	} else {
+		gitCodePath += defaultGiteCodeToken
+	}
+	headersGitCode := http.Header{contentType: []string{headerContentType}}
+	gitCodeRepo := new(Repo)
+	gitCodeErr := getParsedResponse("GET", gitCodePath, headersGitCode, nil, &gitCodeRepo)
+	if err != nil && gitCodeErr != nil {
 		msg := err.Error() + ": check repo_id failed"
 		return *repo, errors.New(msg)
+	}
+	if gitCodeErr == nil {
+		repo = gitCodeRepo
 	}
 	for _, allowedRepo := range allowedRepos {
 		if strings.Split(repo.Fullname, "/")[0] == allowedRepo {
@@ -224,12 +268,29 @@ func VerifyUser(userInRepo UserInRepo) error {
 	} else {
 		path += defaultToken
 	}
-	headers := http.Header{contentType: []string{"application/json;charset=UTF-8"}}
+	if gitCodeSwitch {
+		path = fmt.Sprintf(
+			"https://api.gitcode.com/api/v5/repos/%s/%s/collaborators/%s/permission%s",
+			userInRepo.Owner,
+			userInRepo.Repo,
+			userInRepo.Username,
+			appendPathAccessToken,
+		)
+		if userInRepo.Token != "" {
+			path += userInRepo.Token
+		} else {
+			path += defaultGiteCodeToken
+		}
+	}
+	headers := http.Header{contentType: []string{headerContentType}}
 	giteeUser := new(giteeUser)
 	err := getParsedResponse("GET", path, headers, nil, &giteeUser)
 	if err != nil {
 		if userInRepo.Operation == "delete" {
 			msg := err.Error() + ": 删除权限校验失败，用户使用的gitee token错误或已经过期，请重新使用gitee登录"
+			if gitCodeSwitch {
+				msg = err.Error() + ": 删除权限校验失败，用户使用的gitCode token错误或已经过期，请重新使用gitCode登录"
+			}
 			return errors.New(msg)
 		} else {
 			msg := err.Error() + ": verify user permission failed"
@@ -407,6 +468,12 @@ func GetLFSMapping(userInRepo UserInRepo, pythonScriptPath ...string) (map[strin
 	repo := userInRepo.Repo
 	username := userInRepo.Username
 	token := userInRepo.Token
+	var platform string
+	if gitCodeSwitch {
+		platform = "gitcode"
+	} else {
+		platform = "gitee"
+	}
 
 	// 确定Python脚本路径
 	scriptPath, err := resolveScriptPath(pythonScriptPath...)
@@ -424,6 +491,7 @@ func GetLFSMapping(userInRepo UserInRepo, pythonScriptPath ...string) (map[strin
 	// 构建并执行命令
 	cmd := exec.Command("python3")
 	cmd.Args = append(cmd.Args, scriptPath)
+	cmd.Args = append(cmd.Args, platform)
 	cmd.Args = append(cmd.Args, owner)
 	cmd.Args = append(cmd.Args, repo)
 	cmd.Args = append(cmd.Args, outputFile)
@@ -489,7 +557,7 @@ func parseOutputFile(outputFile string) (map[string]FileInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid file path: %w", err)
 	}
-	data, err := os.ReadFile(absPath)
+	data, err := os.ReadFile(absPath) // #nosec G304 -- absPath validated with directory boundary check above
 	if err != nil {
 		return nil, fmt.Errorf("读取输出文件失败: %w", err)
 	}

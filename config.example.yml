@@ -16,4 +16,7 @@ OPENEULER_ACCOUNT_PARAM:
   URL_PATH: "**********"
   APP_ID: "**********"
   APP_SECRET: "**********"
+ALLOWED_REPOS:
+  - "***"
+  - "***"
 

@@ -24,11 +24,12 @@ var (
 	defaultToken          string
 	defaultGiteCodeToken  string
 	gitCodeSwitch         bool
+	defaultGithubToken    string
 	openEulerAccountParam batch.OpenEulerAccountParam
 )
 
 var (
-	allowedRepos        = []string{"openeuler", "src-openeuler", "lfs-org", "openeuler-test"}
+	allowedRepos        []string
 	uploadPermissions   = []string{"admin", "developer"}
 	downloadPermissions = []string{"admin", "developer", "read"}
 )
@@ -112,7 +113,19 @@ func Init(cfg *config.Config) error {
 		}
 	}
 
+	defaultGithubToken = cfg.DefaultGithubToken
+	if defaultGithubToken == "" {
+		defaultGithubToken = os.Getenv("DEFAULT_GITHUB_TOKEN")
+		if defaultGithubToken == "" {
+			return errors.New("default github token required")
+		}
+	}
 	gitCodeSwitch = cfg.GitCodeSwitch
+	if len(cfg.AllowedRepos) > 0 {
+		allowedRepos = cfg.AllowedRepos
+	} else {
+		allowedRepos = []string{"openeuler", "src-openeuler", "lfs-org", "openeuler-test"}
+	}
 	return nil
 }
 
@@ -544,7 +557,7 @@ func parseOutputFile(outputFile string) (map[string]FileInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid file path: %w", err)
 	}
-	data, err := os.ReadFile(absPath)
+	data, err := os.ReadFile(absPath) // #nosec G304 -- absPath validated with directory boundary check above
 	if err != nil {
 		return nil, fmt.Errorf("读取输出文件失败: %w", err)
 	}

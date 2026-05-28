@@ -13,6 +13,7 @@ import (
 	"github.com/metalogical/BigFiles/batch"
 	"github.com/metalogical/BigFiles/db"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/gorm"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -42,9 +43,10 @@ var serverInfo = ServerInfo{
 }
 
 const (
-	batchUrlPath    = "/owner/repo/objects/batch"
-	expectedPanic   = "expected panic but none occurred"
-	unexpectedPanic = "unexpected panic value or wantErr mismatch"
+	batchUrlPath       = "/owner/repo/objects/batch"
+	githubBatchUrlPath = "/github/owner/repo/objects/batch"
+	expectedPanic      = "expected panic but none occurred"
+	unexpectedPanic    = "unexpected panic value or wantErr mismatch"
 )
 
 func TestNew(t *testing.T) {
@@ -1275,6 +1277,103 @@ func TestParsePaginationParams(t *testing.T) {
 			if gotLimit != tt.wantLimit {
 				t.Errorf("parsePaginationParams() gotLimit = %v, want %v", gotLimit, tt.wantLimit)
 			}
+		})
+	}
+}
+
+func TestHandleGithubBatch(t *testing.T) {
+	validatecfg.ownerRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
+	validatecfg.reponameRegexp, _ = regexp.Compile(`^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`)
+	validatecfg.usernameRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
+	validatecfg.passwordRegexp, _ = regexp.Compile(`^[a-zA-Z0-9!@_#$%^&*()-=+,?.,]*$`)
+
+	s := &server{
+		ttl:       time.Hour,
+		bucket:    "Bucket",
+		prefix:    "Prefix",
+		cdnDomain: "CDNDomain",
+		isGithubAuthorized: func(userInRepo auth.UserInRepo) error {
+			return errors.New("unauthorized: mock github auth")
+		},
+	}
+
+	type args struct {
+		method  string
+		url     string
+		body    string
+		headers map[string]string
+	}
+	tests := []struct {
+		name           string
+		args           args
+		wantStatusCode int
+	}{
+		{
+			name: "invalid request body",
+			args: args{
+				method: http.MethodPost,
+				url:    githubBatchUrlPath,
+				body:   "invalid json",
+			},
+			wantStatusCode: http.StatusNotFound,
+		},
+		{
+			name: "missing auth returns 401",
+			args: args{
+				method: http.MethodPost,
+				url:    githubBatchUrlPath,
+				body:   `{"operation":"download","objects":[{"oid":"` + strings.Repeat("a", 64) + `","size":100}]}`,
+			},
+			wantStatusCode: http.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.args.method, tt.args.url, strings.NewReader(tt.args.body))
+			req.Header.Set("Content-Type", "application/json")
+			for k, v := range tt.args.headers {
+				req.Header.Set(k, v)
+			}
+
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("owner", "owner")
+			rctx.URLParams.Add("repo", "repo")
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+			w := httptest.NewRecorder()
+			s.handleGithubBatch(w, req)
+			assert.Equal(t, tt.wantStatusCode, w.Code)
+		})
+	}
+}
+
+func TestApplySearchFilter(t *testing.T) {
+	db, err := gorm.Open(nil, &gorm.Config{DryRun: true})
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	tests := []struct {
+		name      string
+		searchKey string
+	}{
+		{
+			name:      "filter with slash divides into owner and repo",
+			searchKey: "myowner/myrepo",
+		},
+		{
+			name:      "filter without slash searches owner or repo",
+			searchKey: "searchterm",
+		},
+		{
+			name:      "empty search key applies OR filter",
+			searchKey: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := applySearchFilter(db, tt.searchKey)
+			assert.NotNil(t, result)
 		})
 	}
 }

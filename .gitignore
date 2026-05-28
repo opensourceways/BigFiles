@@ -1,2 +1,7 @@
 .vscode
 .idea
+config.yml
+coverage.out
+coverage
+coverage*.out
+test_output.txt

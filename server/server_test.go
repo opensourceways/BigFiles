@@ -960,16 +960,18 @@ func TestBuildListResponse(t *testing.T) {
 	s := &server{}
 
 	// 调用 buildListResponse
-	response := s.buildListResponse(files, total)
+	response := s.buildListResponse(files, total, "gitee")
 
 	// 进行断言，确保返回的结构符合预期
 	result := response.(struct {
-		Total int            `json:"total"`
-		Files []FileResponse `json:"files"`
+		Total    int            `json:"total"`
+		Platform string         `json:"platform"`
+		Files    []FileResponse `json:"files"`
 	})
 
 	// 验证结果
 	assert.Equal(t, total, int64(result.Total))
+	assert.Equal(t, "gitee", result.Platform)
 	assert.Equal(t, "owner1", result.Files[0].Owner)
 	assert.Equal(t, "repo1", result.Files[0].Repo)
 	assert.Equal(t, 1234, result.Files[0].Size)

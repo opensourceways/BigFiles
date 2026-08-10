@@ -483,7 +483,11 @@ func (s *server) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := s.buildListResponse(files, total)
+	// The repo's hosting platform is derived from its owner (ResolvePlatform),
+	// not from the file rows, so it stays stable regardless of the platform
+	// filter and is correct even when no LFS files exist yet.
+	repoPlatform := auth.ResolvePlatform(owner)
+	resp := s.buildListResponse(files, total, repoPlatform)
 	w.Header().Set(contentType, jsonHeader)
 	w.WriteHeader(http.StatusOK)
 
@@ -556,7 +560,7 @@ type FileResponse struct {
 	UpdateTime int64  `json:"update_time"`
 }
 
-func (s *server) buildListResponse(files []db.LfsObj, total int64) interface{} {
+func (s *server) buildListResponse(files []db.LfsObj, total int64, repoPlatform string) interface{} {
 	response := make([]FileResponse, len(files))
 	for i, file := range files {
 		response[i] = FileResponse{
@@ -572,11 +576,13 @@ func (s *server) buildListResponse(files []db.LfsObj, total int64) interface{} {
 	}
 
 	return struct {
-		Total int            `json:"total"`
-		Files []FileResponse `json:"files"`
+		Total    int            `json:"total"`
+		Platform string         `json:"platform"`
+		Files    []FileResponse `json:"files"`
 	}{
-		Total: int(total),
-		Files: response,
+		Total:    int(total),
+		Platform: repoPlatform,
+		Files:    response,
 	}
 }
 

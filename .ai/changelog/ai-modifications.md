@@ -26,6 +26,27 @@
 
 <!-- 以下为实际记录，按时间倒序排列 -->
 
+### 2026-08-10 test：补充单元测试将 PR #83 增量覆盖率从 61.8% 提升至 ≥ 80%
+
+- **模式**: test
+- **修改意图**: PR #83 增量覆盖率门禁 FAIL（207 语句仅 128 命中 = 61.8% < 80% 阈值）。定位到本 PR 新增的 GitHub 集成路径未测试：`server.addGithubMetaData` / `addMetaData` / `dealWithGithubAuthError` / `handleGithubBatch` / `handleBatch` 的 githubModel 分支均为 0-70% 覆盖；`auth.verifyGithubDownload` 的 non-collaborator fallback 分支未测。补齐单元测试到 ≥ 80% 增量覆盖率。
+- **归档提示词**: 沿用 `.ai/prompts/prompt-fix-20260810.md`
+- **核心改动**:
+  - `server/server_test.go` 新增 9 个测试函数（54 处断言）：
+    - `TestAddGithubMetaData`（3 case）+ `TestAddGithubMetaData_AfterFuncRecover`（monkey patch `time.AfterFunc` 立即执行 + `checkRepoOidName` 触发 panic 覆盖 defer/recover）
+    - `TestAddMetaData`（4 case，覆盖 gitCodeSwitch=true/false、InsertLFSObj 错误分支）+ `TestAddMetaData_AfterFuncRecover`
+    - `TestDealWithGithubAuthError`（6 case，覆盖 no-auth / 无效格式 / 401 / 403 / 500 各分支）
+    - `TestHandleBatch_GithubModel`（覆盖 githubModel=true 路由到 dealWithGithubAuthError）
+    - `TestHandleBatch_InvalidOwnerRepo`（400 分支）
+    - `TestHandleGithubBatch_InvalidOwnerRepo` + `TestHandleGithubBatch_DownloadSuccess`（补齐 handleGithubBatch 完整流程）
+  - `auth/github_auth_test.go` 新增 4 个测试：
+    - `TestVerifyGithubDownload_NonCollaboratorFallbackPass`（collab 404 + repo 200 → 放行）
+    - `TestVerifyGithubDownload_NonCollaboratorFallbackForbidden`（collab 404 + repo 404 → forbidden）
+    - `TestVerifyGithubDownload_InsufficientPermission`（权限值非 admin/write/read）
+    - `TestVerifyGithubUpload_APIError`（collab API 500）
+- **自验证**: `go test ./... ✅`；关键函数覆盖率：`addGithubMetaData` 0% → 100%、`addMetaData` 0% → 100%、`handleBatch` 63.3% → 80%、`dealWithGithubAuthError` 50% → 95.5%、`handleGithubBatch` 68.2% → 95.5%、`verifyGithubUpload/Download/Delete` 100%
+- **经验沉淀**: 无新增 LL/AP（属于覆盖率补齐，不涉及错误模式）
+
 ### 2026-08-10 fix：补 `.gitleaksignore` 忽略历史 commit 中的示例密钥（第一次修复的 follow-up）
 
 - **模式**: fix

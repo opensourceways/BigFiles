@@ -267,6 +267,61 @@ func (s *SuiteGithubAuth) TestVerifyGithubDownload_UnauthorizedFail() {
 	assert.Contains(s.T(), err.Error(), "unauthorized")
 }
 
+func (s *SuiteGithubAuth) TestVerifyGithubDownload_NonCollaboratorFallbackPass() {
+	// Given: collaborator API 返回 404（非协作者），但 repo API 返回 200
+	// verifyGithubDownload 应走 fallback 分支并放行
+	mockServer := mockGithubServer("openeuler", "repo", false, "", "", http.StatusOK, http.StatusNotFound)
+	defer mockServer.Close()
+	unpatch := patchGithubAPI(mockServer)
+	defer unpatch()
+
+	userInRepo := UserInRepo{Owner: "openeuler", Repo: "repo", Username: "user", Token: "token", Operation: "download"}
+
+	assert.NoError(s.T(), VerifyGithubUser(userInRepo))
+}
+
+func (s *SuiteGithubAuth) TestVerifyGithubDownload_NonCollaboratorFallbackForbidden() {
+	// Given: collaborator API 404 + repo API 404 → fallback 也失败，最终返回 forbidden
+	mockServer := mockGithubServer("openeuler", "repo", false, "", "", http.StatusNotFound, http.StatusNotFound)
+	defer mockServer.Close()
+	unpatch := patchGithubAPI(mockServer)
+	defer unpatch()
+
+	userInRepo := UserInRepo{Owner: "openeuler", Repo: "repo", Username: "user", Token: "token", Operation: "download"}
+
+	err := VerifyGithubUser(userInRepo)
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "forbidden")
+}
+
+func (s *SuiteGithubAuth) TestVerifyGithubDownload_InsufficientPermission() {
+	// Given: collaborator API 返回未知权限（比如空字符串），不满足 admin/write/read
+	mockServer := mockGithubServer("openeuler", "repo", false, "", "none", http.StatusOK, http.StatusOK)
+	defer mockServer.Close()
+	unpatch := patchGithubAPI(mockServer)
+	defer unpatch()
+
+	userInRepo := UserInRepo{Owner: "openeuler", Repo: "repo", Username: "user", Token: "token", Operation: "download"}
+
+	err := VerifyGithubUser(userInRepo)
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "forbidden")
+}
+
+func (s *SuiteGithubAuth) TestVerifyGithubUpload_APIError() {
+	// Given: collaborator API 500 → 系统错误
+	mockServer := mockGithubServer("openeuler", "repo", false, "", "", http.StatusOK, http.StatusInternalServerError)
+	defer mockServer.Close()
+	unpatch := patchGithubAPI(mockServer)
+	defer unpatch()
+
+	userInRepo := UserInRepo{Owner: "openeuler", Repo: "repo", Username: "user", Token: "token", Operation: "upload"}
+
+	err := VerifyGithubUser(userInRepo)
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "verify github user permission failed")
+}
+
 func (s *SuiteGithubAuth) TestVerifyGithubDelete_AdminPass() {
 	// Given: collaborator API 返回 admin 权限
 	mockServer := mockGithubServer("openeuler", "repo", false, "", "admin", http.StatusOK, http.StatusOK)

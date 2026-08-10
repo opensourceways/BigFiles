@@ -1348,6 +1348,341 @@ func TestHandleGithubBatch(t *testing.T) {
 	}
 }
 
+func TestAddGithubMetaData(t *testing.T) {
+	tests := []struct {
+		name           string
+		req            batch.Request
+		insertErr      error
+		wantErr        bool
+		wantStatusCode int
+	}{
+		{
+			name: "non-upload operation returns nil without inserting",
+			req: batch.Request{
+				Operation: "download",
+				Objects:   []batch.RequestObject{{OID: "aaa", Size: 1}},
+			},
+			wantErr:        false,
+			wantStatusCode: http.StatusOK,
+		},
+		{
+			name: "upload operation inserts successfully",
+			req: batch.Request{
+				Operation: "upload",
+				Objects: []batch.RequestObject{
+					{OID: "oid1", Size: 100},
+					{OID: "oid2", Size: 200},
+				},
+			},
+			insertErr:      nil,
+			wantErr:        false,
+			wantStatusCode: http.StatusOK,
+		},
+		{
+			name: "upload operation returns 500 when InsertLFSObj fails",
+			req: batch.Request{
+				Operation: "upload",
+				Objects:   []batch.RequestObject{{OID: "oid1", Size: 100}},
+			},
+			insertErr:      errors.New("insert failed"),
+			wantErr:        true,
+			wantStatusCode: http.StatusInternalServerError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			monkey.Patch(db.InsertLFSObj, func(_ db.LfsObj) error { return tt.insertErr })
+			monkey.Patch(checkRepoOidName, func(_ auth.UserInRepo) map[string]auth.FileInfo { return nil })
+			defer monkey.UnpatchAll()
+
+			w := httptest.NewRecorder()
+			userInRepo := auth.UserInRepo{Owner: "owner", Repo: "repo", Username: "user"}
+			err := addGithubMetaData(tt.req, w, userInRepo)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("addGithubMetaData() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantStatusCode != http.StatusOK && w.Code != tt.wantStatusCode {
+				t.Errorf("addGithubMetaData() status = %v, want %v", w.Code, tt.wantStatusCode)
+			}
+		})
+	}
+}
+
+// TestAddGithubMetaData_AfterFuncRecover 覆盖 addGithubMetaData 内 time.AfterFunc
+// 的 defer/recover 分支：patch time.AfterFunc 使其立即执行回调，并让
+// checkRepoOidName panic 以触发 recover。
+func TestAddGithubMetaData_AfterFuncRecover(t *testing.T) {
+	monkey.Patch(db.InsertLFSObj, func(_ db.LfsObj) error { return nil })
+	monkey.Patch(checkRepoOidName, func(_ auth.UserInRepo) map[string]auth.FileInfo {
+		panic("simulated panic")
+	})
+	monkey.Patch(time.AfterFunc, func(_ time.Duration, f func()) *time.Timer {
+		f() // 立即执行以覆盖 goroutine 内分支
+		return nil
+	})
+	defer monkey.UnpatchAll()
+
+	w := httptest.NewRecorder()
+	req := batch.Request{
+		Operation: "upload",
+		Objects:   []batch.RequestObject{{OID: "oid1", Size: 100}},
+	}
+	err := addGithubMetaData(req, w, auth.UserInRepo{Owner: "o", Repo: "r", Username: "u"})
+	assert.NoError(t, err)
+}
+
+func TestAddMetaData(t *testing.T) {
+	tests := []struct {
+		name           string
+		req            batch.Request
+		gitCode        bool
+		insertErr      error
+		wantStatusCode int
+		wantPlatform   string
+	}{
+		{
+			name: "non-upload operation is skipped",
+			req: batch.Request{
+				Operation: "download",
+				Objects:   []batch.RequestObject{{OID: "x", Size: 1}},
+			},
+			wantStatusCode: http.StatusOK,
+		},
+		{
+			name: "upload with gitCodeSwitch=false uses gitee platform",
+			req: batch.Request{
+				Operation: "upload",
+				Objects:   []batch.RequestObject{{OID: "oid1", Size: 100}},
+			},
+			gitCode:        false,
+			wantStatusCode: http.StatusOK,
+			wantPlatform:   "gitee",
+		},
+		{
+			name: "upload with gitCodeSwitch=true uses atomGit platform",
+			req: batch.Request{
+				Operation: "upload",
+				Objects:   []batch.RequestObject{{OID: "oid1", Size: 100}},
+			},
+			gitCode:        true,
+			wantStatusCode: http.StatusOK,
+			wantPlatform:   "atomGit",
+		},
+		{
+			name: "upload with InsertLFSObj error writes 500",
+			req: batch.Request{
+				Operation: "upload",
+				Objects:   []batch.RequestObject{{OID: "oid1", Size: 100}},
+			},
+			insertErr:      errors.New("db down"),
+			wantStatusCode: http.StatusInternalServerError,
+		},
+	}
+	origGitCode := gitCodeSwitch
+	defer func() { gitCodeSwitch = origGitCode }()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gitCodeSwitch = tt.gitCode
+			var capturedPlatform string
+			monkey.Patch(db.InsertLFSObj, func(obj db.LfsObj) error {
+				capturedPlatform = obj.Platform
+				return tt.insertErr
+			})
+			monkey.Patch(checkRepoOidName, func(_ auth.UserInRepo) map[string]auth.FileInfo { return nil })
+			defer monkey.UnpatchAll()
+
+			w := httptest.NewRecorder()
+			addMetaData(tt.req, w, auth.UserInRepo{Owner: "o", Repo: "r", Username: "u"})
+
+			if tt.wantStatusCode != http.StatusOK && w.Code != tt.wantStatusCode {
+				t.Errorf("addMetaData() status = %v, want %v", w.Code, tt.wantStatusCode)
+			}
+			if tt.wantPlatform != "" && capturedPlatform != tt.wantPlatform {
+				t.Errorf("addMetaData() platform = %v, want %v", capturedPlatform, tt.wantPlatform)
+			}
+		})
+	}
+}
+
+// TestAddMetaData_AfterFuncRecover 覆盖 addMetaData 内 time.AfterFunc
+// 的 defer/recover 分支
+func TestAddMetaData_AfterFuncRecover(t *testing.T) {
+	monkey.Patch(db.InsertLFSObj, func(_ db.LfsObj) error { return nil })
+	monkey.Patch(checkRepoOidName, func(_ auth.UserInRepo) map[string]auth.FileInfo {
+		panic("simulated panic")
+	})
+	monkey.Patch(time.AfterFunc, func(_ time.Duration, f func()) *time.Timer {
+		f()
+		return nil
+	})
+	defer monkey.UnpatchAll()
+
+	w := httptest.NewRecorder()
+	req := batch.Request{
+		Operation: "upload",
+		Objects:   []batch.RequestObject{{OID: "oid1", Size: 100}},
+	}
+	addMetaData(req, w, auth.UserInRepo{Owner: "o", Repo: "r", Username: "u"})
+}
+
+func TestDealWithGithubAuthError(t *testing.T) {
+	validatecfg.usernameRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
+	validatecfg.passwordRegexp, _ = regexp.Compile(`^[a-zA-Z0-9!@_#$%^&*()-=+,?.,]*$`)
+
+	basicAuthReq := func(user, pass string) *http.Request {
+		r := httptest.NewRequest(http.MethodPost, githubBatchUrlPath, nil)
+		r.SetBasicAuth(user, pass)
+		return r
+	}
+
+	tests := []struct {
+		name           string
+		req            *http.Request
+		authorized     func(auth.UserInRepo) error
+		wantErr        bool
+		wantStatusCode int
+	}{
+		{
+			name:           "no auth header returns unauthorized 401",
+			req:            httptest.NewRequest(http.MethodPost, githubBatchUrlPath, nil),
+			wantErr:        true,
+			wantStatusCode: 401,
+		},
+		{
+			name:           "invalid username format returns 400",
+			req:            basicAuthReq("1invalid", "token"),
+			wantErr:        true,
+			wantStatusCode: http.StatusBadRequest,
+		},
+		{
+			name:           "basic auth success passes",
+			req:            basicAuthReq("valid", "token"),
+			authorized:     func(_ auth.UserInRepo) error { return nil },
+			wantErr:        false,
+			wantStatusCode: http.StatusOK,
+		},
+		{
+			name:           "basic auth returns forbidden -> 403",
+			req:            basicAuthReq("valid", "token"),
+			authorized:     func(_ auth.UserInRepo) error { return errors.New("forbidden: no permission") },
+			wantErr:        true,
+			wantStatusCode: 403,
+		},
+		{
+			name:           "basic auth returns unauthorized prefix -> 401",
+			req:            basicAuthReq("valid", "token"),
+			authorized:     func(_ auth.UserInRepo) error { return errors.New("unauthorized: bad token") },
+			wantErr:        true,
+			wantStatusCode: 401,
+		},
+		{
+			name:           "basic auth returns unknown error -> 500",
+			req:            basicAuthReq("valid", "token"),
+			authorized:     func(_ auth.UserInRepo) error { return errors.New("boom") },
+			wantErr:        true,
+			wantStatusCode: 500,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &server{isGithubAuthorized: tt.authorized}
+			w := httptest.NewRecorder()
+			err := s.dealWithGithubAuthError(auth.UserInRepo{Owner: "o", Repo: "r"}, w, tt.req)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("dealWithGithubAuthError() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantStatusCode != http.StatusOK && w.Code != tt.wantStatusCode {
+				t.Errorf("dealWithGithubAuthError() status = %v, want %v", w.Code, tt.wantStatusCode)
+			}
+		})
+	}
+}
+
+func TestHandleBatch_GithubModel(t *testing.T) {
+	validatecfg.ownerRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
+	validatecfg.reponameRegexp, _ = regexp.Compile(`^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`)
+	validatecfg.usernameRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
+	validatecfg.passwordRegexp, _ = regexp.Compile(`^[a-zA-Z0-9!@_#$%^&*()-=+,?.,]*$`)
+
+	origModel := githubModel
+	githubModel = true
+	defer func() { githubModel = origModel }()
+
+	body := `{"operation":"download","objects":[{"oid":"` + strings.Repeat("a", 64) + `","size":100}]}`
+	req := httptest.NewRequest(http.MethodPost, batchUrlPath, strings.NewReader(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("owner", "owner")
+	rctx.URLParams.Add("repo", "repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	s := &server{
+		ttl:    time.Hour,
+		bucket: "bkt",
+		isGithubAuthorized: func(_ auth.UserInRepo) error {
+			return errors.New("unauthorized: no auth")
+		},
+	}
+	w := httptest.NewRecorder()
+	s.handleBatch(w, req)
+	assert.Equal(t, 401, w.Code, "githubModel=true should route to dealWithGithubAuthError and return 401 without auth")
+}
+
+func TestHandleBatch_InvalidOwnerRepo(t *testing.T) {
+	validatecfg.ownerRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
+	validatecfg.reponameRegexp, _ = regexp.Compile(`^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`)
+
+	body := `{"operation":"download","objects":[]}`
+	req := httptest.NewRequest(http.MethodPost, batchUrlPath, strings.NewReader(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("owner", "1bad-owner")
+	rctx.URLParams.Add("repo", "repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	s := &server{}
+	w := httptest.NewRecorder()
+	s.handleBatch(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandleGithubBatch_InvalidOwnerRepo(t *testing.T) {
+	validatecfg.ownerRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
+	validatecfg.reponameRegexp, _ = regexp.Compile(`^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`)
+
+	body := `{"operation":"download","objects":[]}`
+	req := httptest.NewRequest(http.MethodPost, githubBatchUrlPath, strings.NewReader(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("owner", "1bad-owner")
+	rctx.URLParams.Add("repo", "repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	s := &server{}
+	w := httptest.NewRecorder()
+	s.handleGithubBatch(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandleGithubBatch_DownloadSuccess(t *testing.T) {
+	validatecfg.ownerRegexp, _ = regexp.Compile(`^[a-zA-Z]([-_.]?[a-zA-Z0-9]+)*$`)
+	validatecfg.reponameRegexp, _ = regexp.Compile(`^[a-zA-Z0-9_.-]{1,189}[a-zA-Z0-9]$`)
+
+	// download operation: skips addGithubMetaData insertion path
+	body := `{"operation":"download","objects":[]}`
+	req := httptest.NewRequest(http.MethodPost, githubBatchUrlPath, strings.NewReader(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("owner", "owner")
+	rctx.URLParams.Add("repo", "repo")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	s := &server{
+		isGithubAuthorized: func(_ auth.UserInRepo) error { return nil },
+	}
+	w := httptest.NewRecorder()
+	req.SetBasicAuth("user", "token")
+	s.handleGithubBatch(w, req)
+	assert.Equal(t, http.StatusOK, w.Code, "download with valid auth should return 200")
+}
+
 func TestApplySearchFilter(t *testing.T) {
 	db, err := gorm.Open(nil, &gorm.Config{DryRun: true})
 	assert.Nil(t, err)

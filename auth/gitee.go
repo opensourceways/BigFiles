@@ -28,10 +28,17 @@ var (
 )
 
 var (
-	allowedRepos        = []string{"openeuler", "src-openeuler", "lfs-org", "openeuler-test"}
-	uploadPermissions   = []string{"admin", "developer"}
-	downloadPermissions = []string{"admin", "developer", "read"}
+	defaultAllowedRepos  = []string{"openeuler", "src-openeuler", "lfs-org", "openeuler-test"}
+	allowedRepos         = []string{"openeuler", "src-openeuler", "lfs-org", "openeuler-test"}
+	uploadPermissions    = []string{"admin", "developer"}
+	downloadPermissions  = []string{"admin", "developer", "read"}
+	namespacePlatformMap = map[string]string{}
+	githubDefaultToken   string
+	githubAllowedOrgs    []string
 )
+
+// supportedPlatforms enumerates the platforms recognised by ResolvePlatform.
+var supportedPlatforms = []string{"gitee", "gitcode", "github"}
 
 const (
 	refer                    = "referer"
@@ -113,7 +120,75 @@ func Init(cfg *config.Config) error {
 	}
 
 	gitCodeSwitch = cfg.GitCodeSwitch
+
+	buildNamespacePlatformMap(cfg)
+	githubAllowedOrgs = cfg.GithubAllowedOrgs
+	githubDefaultToken = cfg.GithubDefaultToken
+	if githubDefaultToken == "" {
+		githubDefaultToken = os.Getenv("GITHUB_DEFAULT_TOKEN")
+	}
 	return nil
+}
+
+// buildNamespacePlatformMap constructs the owner->platform lookup from config,
+// keeping the hardcoded openEuler namespaces as backward-compatible defaults so
+// existing deployments keep working without any configuration change.
+func buildNamespacePlatformMap(cfg *config.Config) {
+	namespacePlatformMap = make(map[string]string)
+	allowedRepos = make([]string, len(defaultAllowedRepos))
+	copy(allowedRepos, defaultAllowedRepos)
+	for _, ns := range defaultAllowedRepos {
+		namespacePlatformMap[ns] = "gitee"
+	}
+	for _, m := range cfg.AllowedNamespaces {
+		if m.Namespace == "" {
+			continue
+		}
+		platform := m.Platform
+		if !isSupportedPlatform(platform) {
+			platform = "gitee"
+		}
+		namespacePlatformMap[m.Namespace] = platform
+		// gitee/gitcode owners must also be admissible in CheckRepoOwner.
+		if platform != "github" {
+			allowedRepos = append(allowedRepos, m.Namespace)
+		}
+	}
+}
+
+func isSupportedPlatform(p string) bool {
+	for _, s := range supportedPlatforms {
+		if s == p {
+			return true
+		}
+	}
+	return false
+}
+
+// ResolvePlatform returns the hosting platform for a given owner namespace.
+// It defaults to "gitcode" when gitCodeSwitch is on, otherwise "gitee".
+func ResolvePlatform(owner string) string {
+	if p, ok := namespacePlatformMap[owner]; ok {
+		return p
+	}
+	if gitCodeSwitch {
+		return "gitcode"
+	}
+	return "gitee"
+}
+
+// PlatformForMetadata maps a resolved platform to the value stored in the
+// lfs_obj.platform column. It keeps the legacy "atomGit" spelling for gitcode
+// so existing rows remain queryable.
+func PlatformForMetadata(platform string) string {
+	switch platform {
+	case "github":
+		return "github"
+	case "gitcode":
+		return "atomGit"
+	default:
+		return "gitee"
+	}
 }
 
 func InitOpenEulerParam(cfg *config.Config) error {
@@ -455,12 +530,7 @@ func GetLFSMapping(userInRepo UserInRepo, pythonScriptPath ...string) (map[strin
 	repo := userInRepo.Repo
 	username := userInRepo.Username
 	token := userInRepo.Token
-	var platform string
-	if gitCodeSwitch {
-		platform = "gitcode"
-	} else {
-		platform = "gitee"
-	}
+	platform := ResolvePlatform(owner)
 
 	// 确定Python脚本路径
 	scriptPath, err := resolveScriptPath(pythonScriptPath...)

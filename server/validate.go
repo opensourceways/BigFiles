@@ -18,12 +18,14 @@ var Webhook_key string
 var gitCodeSwitch bool
 var giteeDefaultToken string
 var atomGiteDefaultToken string
+var githubDefaultToken string
 
 func Init(cfg *config.Config) error {
 	validateConfig := cfg.ValidateConfig
 	gitCodeSwitch = cfg.GitCodeSwitch
 	giteeDefaultToken = cfg.DefaultToken
 	atomGiteDefaultToken = cfg.DefaultGitCodeToken
+	githubDefaultToken = cfg.GithubDefaultToken
 	var err error
 	Webhook_key = validateConfig.WebhookKey
 

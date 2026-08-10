@@ -6,7 +6,28 @@
 
 第三方LFS服务是基于Git LFS插件，实现将Gitee仓库内的大文件上传至第三方LFS服务中的功能。目前该插件仅支持openeuler、src-openeuler组织下的仓库。
 
+> 自建 LFS 服务同样支持 **GitHub** 平台（如 `mindspore-ai` 组织下的仓库）。GitHub 仓库使用 **Personal Access Token（PAT）** 进行鉴权：在 `git` 操作的 Basic Auth 中，用户名填 GitHub 账号，密码填 PAT（需 `repo` 或 `Contents: read/write` 权限）。服务端会校验「仓库归属（owner 是否在允许的 GitHub 组织清单内）」与「协作者权限」，通过后签发 OBS 上传/下载预签名 URL。配置方法见下方 [GitHub 平台配置](#github-平台配置)。
+
 ***
+
+## GitHub 平台配置
+
+GitHub 平台支持通过配置文件开启，需在服务端 `config` 中补充以下字段（也可通过同名环境变量注入）：
+
+| 字段 | 环境变量 | 说明 |
+| --- | --- | --- |
+| `GITHUB_DEFAULT_TOKEN` | `GITHUB_DEFAULT_TOKEN` | 服务端 bot PAT，用于仓库元信息查询与 OID 文件名回填兜底 |
+| `GITHUB_ALLOWED_ORGS` | - | 允许使用本 LFS 服务的 GitHub 组织清单，如 `mindspore-ai` |
+| `ALLOWED_NAMESPACES` | - | owner→平台映射，新增 GitHub 组织时在此登记，如 `{NAMESPACE: mindspore-ai, PLATFORM: github}` |
+
+GitHub 仓库侧只需在仓库根目录创建 `.lfsconfig` 指向自建 LFS：
+
+```
+[lfs]
+    url = https://artlfs.openeuler.openatom.cn/{owner}/{repo}
+```
+
+其中 `{owner}/{repo}` 为 GitHub 上的仓库路径（如 `mindspore-ai/repo`）。之后 `git lfs push` / `git lfs pull` 时按提示输入 GitHub 用户名与 PAT 即可。
 
 ## 在已有仓库启用LFS
 

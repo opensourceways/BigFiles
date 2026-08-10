@@ -47,7 +47,8 @@ type Options struct {
 	TTL    time.Duration // defaults to 1 hour
 	Prefix string
 
-	IsAuthorized func(auth.UserInRepo) error
+	IsAuthorized           func(auth.UserInRepo) error
+	IsAuthorizedByPlatform map[string]func(auth.UserInRepo) error
 }
 
 func (o Options) imputeFromEnv() (Options, error) {
@@ -91,12 +92,13 @@ func New(o Options) (http.Handler, error) {
 	}
 
 	s := &server{
-		ttl:          o.TTL,
-		client:       client,
-		bucket:       o.Bucket,
-		prefix:       o.Prefix,
-		cdnDomain:    o.CdnDomain,
-		isAuthorized: o.IsAuthorized,
+		ttl:                   o.TTL,
+		client:                client,
+		bucket:                o.Bucket,
+		prefix:                o.Prefix,
+		cdnDomain:             o.CdnDomain,
+		isAuthorized:          o.IsAuthorized,
+		isAuthorizedByPlatform: o.IsAuthorizedByPlatform,
 	}
 
 	r := chi.NewRouter()
@@ -119,7 +121,8 @@ type server struct {
 	prefix    string
 	cdnDomain string
 
-	isAuthorized func(auth.UserInRepo) error
+	isAuthorized           func(auth.UserInRepo) error
+	isAuthorizedByPlatform map[string]func(auth.UserInRepo) error
 }
 
 func (s *server) key(oid string) string {
@@ -154,7 +157,8 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err = auth.CheckRepoOwner(userInRepo); req.Operation == "upload" || err != nil {
+	platform := auth.ResolvePlatform(userInRepo.Owner)
+	if _, err = auth.CheckRepoOwnerByPlatform(platform, userInRepo); req.Operation == "upload" || err != nil {
 		err := s.dealWithAuthError(userInRepo, w, r)
 		if err != nil {
 			return
@@ -170,10 +174,7 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func addMetaData(req batch.Request, w http.ResponseWriter, userInRepo auth.UserInRepo) {
-	platform := "gitee"
-	if gitCodeSwitch {
-		platform = "atomGit"
-	}
+	platform := auth.PlatformForMetadata(auth.ResolvePlatform(userInRepo.Owner))
 	// 添加元数据
 	if req.Operation == "upload" {
 		for _, object := range req.Objects {
@@ -238,6 +239,17 @@ func (s *server) handleRequestObject(req batch.Request) batch.Response {
 	return resp
 }
 
+// authorizedFn returns the platform-specific authorizer, falling back to the
+// generic IsAuthorized when no platform mapping is configured.
+func (s *server) authorizedFn(userInRepo auth.UserInRepo) func(auth.UserInRepo) error {
+	if s.isAuthorizedByPlatform != nil {
+		if fn, ok := s.isAuthorizedByPlatform[auth.ResolvePlatform(userInRepo.Owner)]; ok && fn != nil {
+			return fn
+		}
+	}
+	return s.isAuthorized
+}
+
 func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWriter, r *http.Request) error {
 	var err error
 	if username, password, ok := r.BasicAuth(); ok {
@@ -252,7 +264,7 @@ func (s *server) dealWithAuthError(userInRepo auth.UserInRepo, w http.ResponseWr
 			}))
 			return errors.New("invalid username or password format")
 		}
-		err = s.isAuthorized(userInRepo)
+		err = s.authorizedFn(userInRepo)(userInRepo)
 	} else if authToken := r.Header.Get("Authorization"); authToken != "" {
 		err = auth.VerifySSHAuthToken(authToken, userInRepo)
 	} else {
@@ -522,9 +534,12 @@ func (s *server) getLfsFiles(owner, repo, platform string, page, limit int) ([]d
 
 func (s *server) countLfsFiles(owner, repo, platform string) (int64, error) {
 	var total int64
-	if err := db.Db.Model(&db.LfsObj{}).
-		Where("owner = ? AND repo = ? AND platform = ? AND exist = 1", owner, repo, platform).
-		Count(&total).Error; err != nil {
+	query := db.Db.Model(&db.LfsObj{}).
+		Where("owner = ? AND repo = ? AND exist = 1", owner, repo)
+	if platform != "" {
+		query = query.Where("platform = ?", platform)
+	}
+	if err := query.Count(&total).Error; err != nil {
 		return 0, err
 	}
 	return total, nil
@@ -536,6 +551,7 @@ type FileResponse struct {
 	Size       int    `json:"size"`
 	Oid        string `json:"oid"`
 	FileName   string `json:"file_name"`
+	Platform   string `json:"platform"`
 	CreateTime int64  `json:"create_time"`
 	UpdateTime int64  `json:"update_time"`
 }
@@ -549,6 +565,7 @@ func (s *server) buildListResponse(files []db.LfsObj, total int64) interface{} {
 			Size:       file.Size,
 			Oid:        file.Oid,
 			FileName:   file.FileName,
+			Platform:   file.Platform,
 			CreateTime: file.CreateTime.Unix(),
 			UpdateTime: file.UpdateTime.Unix(),
 		}
@@ -592,23 +609,32 @@ func checkOidFileName() {
 		logrus.Errorf("fetch repo list failed: %v", err)
 		return
 	}
-	token := giteeDefaultToken
-	if gitCodeSwitch {
-		token = atomGiteDefaultToken
-	}
 	for _, repo := range repoList {
+		platform := auth.ResolvePlatform(repo.Owner)
 		userInRepo := auth.UserInRepo{
 			Repo:  repo.Repo,
 			Owner: repo.Owner,
-			Token: token}
-		logrus.Infof("checkOidFileName owner:%v repo:%v", repo.Owner, repo.Repo)
+			Token: tokenForPlatform(platform)}
+		logrus.Infof("checkOidFileName owner:%v repo:%v platform:%v", repo.Owner, repo.Repo, platform)
 		checkRepoOidName(userInRepo)
 
 	}
 
 }
 
+func tokenForPlatform(platform string) string {
+	switch platform {
+	case "github":
+		return githubDefaultToken
+	case "gitcode":
+		return atomGiteDefaultToken
+	default:
+		return giteeDefaultToken
+	}
+}
+
 func checkRepoOidName(userInRepo auth.UserInRepo) (oidFileNameMap map[string]auth.FileInfo) {
+	platform := auth.ResolvePlatform(userInRepo.Owner)
 	oidFileNameMap, err := auth.GetLFSMapping(userInRepo)
 	if err != nil {
 		logrus.Errorf("get lfs mapping failed: %v", err)
@@ -616,7 +642,7 @@ func checkRepoOidName(userInRepo auth.UserInRepo) (oidFileNameMap map[string]aut
 	checkOidFileNameMap(oidFileNameMap, userInRepo)
 	if strings.ToLower(userInRepo.Owner) != "src-openeuler" {
 		logrus.Infof("after check owner:%v repo:%v, check src-openeuler", userInRepo.Owner, userInRepo.Repo)
-		repo, err := auth.CheckRepoOwner(userInRepo)
+		repo, err := auth.CheckRepoOwnerByPlatform(platform, userInRepo)
 		if err != nil {
 			return nil
 		}
@@ -633,6 +659,7 @@ func checkOidFileNameMap(oidFileNameMap map[string]auth.FileInfo, userInRepo aut
 	if oidFileNameMap == nil {
 		return
 	}
+	platform := auth.PlatformForMetadata(auth.ResolvePlatform(userInRepo.Owner))
 	for oid, fileInfo := range oidFileNameMap {
 		lfsObjs, err := db.SelectLfsObjByOid(oid)
 		if err != nil {
@@ -649,7 +676,7 @@ func checkOidFileNameMap(oidFileNameMap map[string]auth.FileInfo, userInRepo aut
 				Size:     int(fileInfo.Size),
 				FileName: fileInfo.Name,
 				Exist:    2,
-				Platform: "gitee",
+				Platform: platform,
 				Operator: "",
 			}
 			if err = db.InsertLFSObj(lfsObj); err != nil {
@@ -659,11 +686,11 @@ func checkOidFileNameMap(oidFileNameMap map[string]auth.FileInfo, userInRepo aut
 		}
 
 		// 检查对应oid文件在对应仓库下是否存在，如果不存在则创建对应数据
-		checkLfsObjsInfo(oid, lfsObjs, fileInfo, userInRepo)
+		checkLfsObjsInfo(oid, lfsObjs, fileInfo, userInRepo, platform)
 	}
 }
 
-func checkLfsObjsInfo(oid string, lfsObjs []db.LfsObj, fileInfo auth.FileInfo, userInRepo auth.UserInRepo) {
+func checkLfsObjsInfo(oid string, lfsObjs []db.LfsObj, fileInfo auth.FileInfo, userInRepo auth.UserInRepo, platform string) {
 	exist := false
 	logrus.Infof("check oid:%v info", oid)
 	for _, lfsObj := range lfsObjs {
@@ -688,7 +715,7 @@ func checkLfsObjsInfo(oid string, lfsObjs []db.LfsObj, fileInfo auth.FileInfo, u
 			Size:     int(fileInfo.Size),
 			FileName: fileInfo.Name,
 			Exist:    2,
-			Platform: "gitee",
+			Platform: platform,
 			Operator: "",
 		}
 		if err := db.InsertLFSObj(lfsObj); err != nil {

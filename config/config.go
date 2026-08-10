@@ -17,12 +17,21 @@ type Config struct {
 	ObsRegion              string                 `json:"OBS_REGION"`
 	DefaultToken           string                 `json:"DEFAULT_TOKEN"`
 	DefaultGitCodeToken    string                 `json:"DEFAULT_GIT_CODE_TOKEN"`
+	GithubDefaultToken     string                 `json:"GITHUB_DEFAULT_TOKEN"`
+	GithubAllowedOrgs      []string               `json:"GITHUB_ALLOWED_ORGS"`
+	AllowedNamespaces      []NamespaceMapping     `json:"ALLOWED_NAMESPACES"`
 	ValidateConfig         ValidateConfig         `json:"VALIDATE_REGEXP"`
 	ObsAccessKeyId         string                 `json:"OBS_ACCESS_KEY_ID"`
 	ObsSecretAccessKey     string                 `json:"OBS_SECRET_ACCESS_KEY"`
 	OpenEulerAccountConfig OpenEulerAccountConfig `json:"OPENEULER_ACCOUNT_PARAM"`
 	DBConfig               DBConfig               `json:"DATABASE"`
 	GitCodeSwitch          bool                   `json:"GIT_CODE_SWITCH" default:"false"`
+}
+
+// NamespaceMapping maps a repository owner namespace to its hosting platform.
+type NamespaceMapping struct {
+	Namespace string `json:"NAMESPACE"`
+	Platform  string `json:"PLATFORM"`
 }
 
 type ValidateConfig struct {

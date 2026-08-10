@@ -14,6 +14,10 @@ PLATFORM_CONFIGS = {
     "gitcode": {
         "domain": "gitcode.com",
         "auth_method": "token"  # GitCode必须使用Token认证[6](@ref)
+    },
+    "github": {
+        "domain": "github.com",
+        "auth_method": "token"  # GitHub Personal Access Token
     }
 }
 
@@ -178,7 +182,7 @@ def main(platform, owner, repo, output_file="lfs_mapping.json", username=None, t
 if __name__ == "__main__":
     if len(sys.argv) < 4:
         print("用法: python lfsNameQuery.py <platform> <owner> <repo> [output_file] [username] [token]")
-        print("平台支持: gitee, gitcode")
+        print("平台支持: gitee, gitcode, github")
         sys.exit(1)
 
     args = {

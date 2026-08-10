@@ -122,13 +122,18 @@ func main() {
 	initConfig(cfg)
 
 	s, err := server.New(server.Options{
-		Prefix:          cfg.Prefix,
-		Bucket:          cfg.LfsBucket,
-		Endpoint:        cfg.ObsRegion,
-		CdnDomain:       cfg.CdnDomain,
-		AccessKeyID:     cfg.ObsAccessKeyId,
-		S3Accelerate:    true,
-		IsAuthorized:    auth.GiteeAuth(),
+		Prefix:        cfg.Prefix,
+		Bucket:        cfg.LfsBucket,
+		Endpoint:      cfg.ObsRegion,
+		CdnDomain:     cfg.CdnDomain,
+		AccessKeyID:   cfg.ObsAccessKeyId,
+		S3Accelerate:  true,
+		IsAuthorized:  auth.GiteeAuth(),
+		IsAuthorizedByPlatform: map[string]func(auth.UserInRepo) error{
+			"gitee":   auth.GiteeAuth(),
+			"gitcode": auth.GiteeAuth(),
+			"github":  auth.GithubAuth(),
+		},
 		SecretAccessKey: cfg.ObsSecretAccessKey,
 	})
 

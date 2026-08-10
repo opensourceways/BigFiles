@@ -145,10 +145,10 @@
 
 ## 项目概述
 
-**BigFiles** 是一个基于 Go 1.24.0 + chi 路由框架 的 Git LFS (Large File Storage) 服务端实现，支持大文件通过华为云 OBS 对象存储进行上传、下载和管理，并集成用户认证功能。
+**BigFiles** 是一个基于 Go 1.26.0 + chi 路由框架 的 Git LFS (Large File Storage) 服务端实现，支持大文件通过华为云 OBS 对象存储进行上传、下载和管理，并集成用户认证功能。
 
 **核心技术栈：**
-- Go 1.24.0 + go-chi/chi v4 HTTP 路由框架
+- Go 1.26.0 (toolchain 1.26.5) + go-chi/chi v4 HTTP 路由框架
 - GORM v1.31.1 + MySQL 数据持久化
 - 华为云 OBS SDK (huaweicloud-sdk-go-obs v3.25.9) 对象存储
 

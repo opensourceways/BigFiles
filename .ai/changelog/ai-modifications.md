@@ -26,6 +26,45 @@
 
 <!-- 以下为实际记录，按时间倒序排列 -->
 
+### 2026-08-10 fix：升级 Go 至 1.26.5 修复 26 个 stdlib CVE
+
+- **模式**: fix
+- **修改意图**: PR #83 Trivy 扫描报告 Go stdlib 1.24.11 存在 26 个 CVE（含 crypto/tls 证书校验、net/url 内存耗尽、html/template XSS 等），其中仅 4 个能在 1.24 系列内修复，其余需升级到 1.25.x 或 1.26.x。选择升级至 1.26.5（当前 1.26 系列最新补丁版本）以一次性修复全部漏洞，避免后续被同类未修复漏洞反复阻塞。
+- **归档提示词**: 无（CI 安全门禁修复）
+- **核心改动**:
+  - `go.mod`: `go 1.24.0` → `go 1.26.0`；`toolchain go1.24.11` → `toolchain go1.26.5`
+  - `.github/workflows/workflow-validation.yml`: 3 处 `go-version: '1.24'` → `'1.26.5'`；顶部适配注释同步
+  - `CLAUDE.md`、`.ai/architect/project-architecture-overview.md`、`.ai/skills/bigfiles-code-style/package.json`: 同步版本声明
+- **自验证**: `go build ./...` ✅（toolchain 自动下载 1.26.5）；`go test ./...` 全部 pass（auth 14.9s / config 2.7s / server 9.6s / utils 1.6s）✅；`go vet ./...` ✅
+- **经验沉淀**: 新增 [[LL-008]]
+
+### 2026-08-10 fix：修复 Bandit SAST 在 lfsNameQuery.py 的 12 个告警（含 1 个 HIGH 命令注入）
+
+- **模式**: fix
+- **修改意图**: PR #83 Bandit 扫描 `scripts/lfsNameQuery.py` 报告 12 个安全问题，其中 B605 (HIGH) 存在真实命令注入风险：`force_remove` 兜底分支用 `os.system(f'rm -rf "{path}"')` 拼接 shell 命令，若 `path` 含引号可命令注入；其余 B404/B603/B607 为 subprocess 相关的低危提示（列表参数 + shell=False 已是安全用法，Bandit 静态无法识别）。
+- **归档提示词**: 无（CI 安全门禁修复）
+- **核心改动**:
+  - `scripts/lfsNameQuery.py`:
+    - 重写 `force_remove`：移除 `os.system` shell 拼接，改用 `shutil.rmtree(onerror=_handle_remove_readonly)` + `os.chmod(stat.S_IWRITE)` 处理 Windows 只读文件（消除 B605 HIGH）
+    - 新增模块级 `GIT_BIN = shutil.which("git")`，subprocess 调用改用绝对路径（消除 5 处 B607）
+    - 所有 `subprocess.run` 加 `# nosec B603` 注释（列表参数 + shell=False 是安全用法，属误报）
+    - `import subprocess` 加 `# nosec B404`（导入模块本身不构成安全问题）
+    - 顺手修复：`raise ... from e` 保留异常链；`main` 提取 `repo_dir` 变量避免 `locals()` 判断；`encoded_token` 提前初始化
+- **自验证**: `python -c "import ast; ast.parse(...)"` 通过 ✅；本地无 Bandit，等 CI 验证
+- **经验沉淀**: 新增 [[LL-007]] 与 [[AP-005]]
+
+### 2026-08-10 fix：修复 gitleaks 门禁对文档示例密钥的误报
+
+- **模式**: fix
+- **修改意图**: PR #83 门禁阶段 gitleaks 在 `.ai/skills/local-ci-go/` 目录下的文档/脚本示例中检测到 5 个 `generic-api-key` 匹配（entropy=4.247），阻塞合入。这些字符串是教学示例（展示"错误做法"），非真实凭证。改用低熵占位符可从根源消除误报，避免维护 `.gitleaksignore` fingerprint 列表（fingerprint 含 commit hash，易随变更失效）。
+- **归档提示词**: 无（CI 门禁误报修复，未走 task-prompt-generator）
+- **核心改动**:
+  - `.ai/skills/local-ci-go/references/security-best-practices.md`: 行 13、221 的 `sk-1234...cdef` → `sk-YOUR_API_KEY_HERE`
+  - `.ai/skills/local-ci-go/scripts/run_gitleaks.ps1`: 行 133、140 同样替换
+  - `.ai/skills/local-ci-go/scripts/run_gitleaks.sh`: 行 122、129 同样替换（共 6 处，含 gitleaks 未报出的 1 处，为一致性一并处理）
+- **自验证**: `grep -r "sk-1234...cdef" .` 返回空 ✅；未涉及 Go 代码，无需 `go test` / `golangci-lint`
+- **经验沉淀**: 新增 [[LL-006]] 与 [[AP-004]]
+
 ### 2026-06-03 feat：新增 GITHUB_MODEL 开关合并 GitHub LFS batch 路径
 
 - **模式**: feat

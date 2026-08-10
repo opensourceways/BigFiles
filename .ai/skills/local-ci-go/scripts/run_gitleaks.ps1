@@ -130,14 +130,14 @@ Write-Host "Common fixes:" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "1. Use environment variables:"
 Write-Host "   // Bad"
-Write-Host '   apiKey := "sk-1234567890abcdef"'
+Write-Host '   apiKey := "sk-YOUR_API_KEY_HERE"'
 Write-Host ""
 Write-Host "   // Good"
 Write-Host '   apiKey := os.Getenv("API_KEY")'
 Write-Host ""
 Write-Host "2. Use configuration files (add to .gitignore):"
 Write-Host "   // config.yaml (in .gitignore)"
-Write-Host "   api_key: sk-1234567890abcdef"
+Write-Host "   api_key: sk-YOUR_API_KEY_HERE"
 Write-Host ""
 Write-Host "3. Use secret management services:"
 Write-Host "   - AWS Secrets Manager"

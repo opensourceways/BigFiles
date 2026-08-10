@@ -138,3 +138,57 @@ func (s *Service) InsertMetaData(...) error {
 检测：`grep -rn "db\." server/`（结果应为空）
 
 来源：LL-003
+
+## AP-004 文档 / 脚本示例中出现高熵伪密钥字符串
+
+在文档、演示脚本、测试夹具中演示"如何存储 / 泄露 API key"时，禁止使用形如 `sk-` + hex 的高熵字符串——会被 gitleaks 的 `generic-api-key` 规则判定为真实密钥泄露，阻塞门禁。
+
+❌ 错误：
+```markdown
+const apiKey = "sk-1234...cdef"
+api_key: sk-1234...cdef
+```
+
+```bash
+echo "   apiKey := \"sk-1234...cdef\""
+```
+
+✅ 正确：使用低熵、明显是占位符的字符串
+```markdown
+const apiKey = "sk-YOUR_API_KEY_HERE"
+api_key: sk-YOUR_API_KEY_HERE
+```
+
+```bash
+echo "   apiKey := \"sk-YOUR_API_KEY_HERE\""
+```
+
+检测：`grep -rnE 'sk-[0-9a-f]{16,}' --include='*.md' --include='*.sh' --include='*.ps1' --include='*.go' --include='*.yml' --include='*.yaml' .`（结果应为空）
+
+来源：LL-006
+
+## AP-005 用 os.system / shell=True 搭配字符串拼接执行命令
+
+Python 中禁止用 `os.system(f'...{var}...')` 或 `subprocess.run(f'...{var}...', shell=True)` 拼接外部命令——`var` 若含 shell 元字符（`"`、`;`、`&`、反引号等）会导致命令注入 (CWE-78)，Bandit B605/B602 会拦截。
+
+❌ 错误：
+```python
+os.system(f'rm -rf "{path}"')
+subprocess.run(f'git clone {repo_url}', shell=True)
+```
+
+✅ 正确：使用列表参数 + shell=False（默认），或改用标准库跨平台 API
+```python
+import shutil, stat, os, subprocess
+
+# 删除目录/文件：优先用标准库
+shutil.rmtree(path, onerror=lambda f, p, _: (os.chmod(p, stat.S_IWRITE), f(p)))
+
+# 必须调用外部命令：列表参数、绝对路径、shell=False
+GIT_BIN = shutil.which("git")
+subprocess.run([GIT_BIN, "clone", repo_url, target_dir], check=True)  # nosec B603
+```
+
+检测：`grep -rnE '\bos\.system\(|shell\s*=\s*True' --include='*.py' --exclude-dir=venv --exclude-dir=.venv --exclude-dir=node_modules .`（结果应仅命中已加 `# nosec` 的行或为空）
+
+来源：LL-007

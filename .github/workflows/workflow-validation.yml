@@ -3,7 +3,7 @@
 # 过程约束（TDD 流程、提示词归档、审查报告）由 AI Agent 负责，不在此处检查
 #
 # 来源：ai-standardization-kit/github-workflows/workflow-validation.yml
-# 适配：BigFiles (Go 1.24.0)
+# 适配：BigFiles (Go 1.26.5)
 
 name: AI Workflow Validation
 
@@ -28,7 +28,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.26.5'
           cache: true
 
       - name: Run tests
@@ -51,7 +51,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.26.5'
           cache: true
 
       - name: Run golangci-lint
@@ -73,7 +73,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.26.5'
           cache: true
 
       - name: Build project

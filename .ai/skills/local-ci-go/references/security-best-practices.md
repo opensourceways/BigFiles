@@ -10,7 +10,7 @@ This document provides detailed guidance on fixing common security issues detect
 
 **Bad**:
 ```go
-const apiKey = "sk-1234567890abcdef"
+const apiKey = "sk-YOUR_API_KEY_HERE"
 const dbPassword = "MySecretPassword123"
 ```
 
@@ -218,7 +218,7 @@ func LoadConfig() (*Config, error) {
 
 ```go
 // config.yaml (add to .gitignore)
-api_key: sk-1234567890abcdef
+api_key: sk-YOUR_API_KEY_HERE
 database:
   host: localhost
   password: secret123

@@ -1,9 +1,16 @@
 import os
 import sys
-import subprocess
+import subprocess  # nosec B404 - required for invoking git CLI
 import json
 import shutil
+import stat
 from urllib.parse import quote_plus
+
+# 解析 git 可执行文件绝对路径，避免依赖 PATH 顺序（Bandit B607）
+GIT_BIN = shutil.which("git")
+if not GIT_BIN:
+    print("错误: 未找到 git 可执行文件, 请确认已安装 git 并加入 PATH", file=sys.stderr)
+    sys.exit(1)
 
 # 平台配置映射
 PLATFORM_CONFIGS = {
@@ -26,6 +33,7 @@ def clone_repo_skip_lfs(platform, owner, repo, username=None, token=None, target
     domain = config["domain"]
 
     # 构建认证URL
+    encoded_token = None
     if username and token:
         encoded_username = quote_plus(username)
         encoded_token = quote_plus(token)
@@ -48,10 +56,11 @@ def clone_repo_skip_lfs(platform, owner, repo, username=None, token=None, target
             "GIT_CLONE_PROTECTION_ACTIVE": "false"
         })
 
-        print(f"正在克隆 {platform} 仓库: {repo_url.replace(encoded_token, '***') if token else repo_url}")
+        display_url = repo_url.replace(encoded_token, "***") if encoded_token else repo_url
+        print(f"正在克隆 {platform} 仓库: {display_url}")
 
-        subprocess.run(
-            ["git", "clone", repo_url, target_dir],
+        subprocess.run(  # nosec B603 - args are a fixed list, shell=False
+            [GIT_BIN, "clone", repo_url, target_dir],
             env=env,
             check=True,
             stdout=subprocess.PIPE,
@@ -70,14 +79,14 @@ def clone_repo_skip_lfs(platform, owner, repo, username=None, token=None, target
             error_msg += "\nGitCode提示: 请确认使用Token认证而非密码[6](@ref)"
 
         force_remove(target_dir)
-        raise RuntimeError(error_msg)
+        raise RuntimeError(error_msg) from e
 
 
 def branch_has_lfsconfig(repo_dir, branch):
     """检查分支是否包含.lfsconfig文件"""
     try:
-        result = subprocess.run(
-            ["git", "ls-tree", "-r", branch, "--name-only"],
+        result = subprocess.run(  # nosec B603 - args are a fixed list, shell=False
+            [GIT_BIN, "ls-tree", "-r", branch, "--name-only"],
             cwd=repo_dir,
             capture_output=True,
             text=True,
@@ -91,8 +100,8 @@ def branch_has_lfsconfig(repo_dir, branch):
 def get_all_branches_lfs_mapping(repo_dir):
     """获取所有包含.lfsconfig的分支的LFS文件信息"""
     try:
-        branches = subprocess.run(
-            ["git", "branch", "-a"],
+        branches = subprocess.run(  # nosec B603 - args are a fixed list, shell=False
+            [GIT_BIN, "branch", "-a"],
             cwd=repo_dir,
             capture_output=True,
             text=True,
@@ -110,15 +119,15 @@ def get_all_branches_lfs_mapping(repo_dir):
                 print(f"跳过分支 {branch} (无.lfsconfig文件)")
                 continue
 
-            subprocess.run(
-                ["git", "checkout", branch],
+            subprocess.run(  # nosec B603 - args are a fixed list, shell=False
+                [GIT_BIN, "checkout", branch],
                 cwd=repo_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
 
-            result = subprocess.run(
-                ["git", "lfs", "ls-files", "--json"],
+            result = subprocess.run(  # nosec B603 - args are a fixed list, shell=False
+                [GIT_BIN, "lfs", "ls-files", "--json"],
                 cwd=repo_dir,
                 capture_output=True,
                 text=True,
@@ -141,21 +150,43 @@ def get_all_branches_lfs_mapping(repo_dir):
 
         return lfs_mapping
     except Exception as e:
-        raise RuntimeError(f"获取LFS映射失败: {str(e)}")
+        raise RuntimeError(f"获取LFS映射失败: {str(e)}") from e
+
+
+def _handle_remove_readonly(func, path, _exc_info):
+    """shutil.rmtree onerror 回调：处理 Windows 上 .git 内的只读文件"""
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except OSError:
+        # 已尽力，忽略以让整体流程继续
+        pass
 
 
 def force_remove(path):
-    """跨平台强制删除文件/目录"""
+    """跨平台强制删除文件/目录
+
+    避免使用 os.system + f-string 拼接命令（Bandit B605：命令注入风险），
+    改用 shutil.rmtree + onerror 回调处理只读文件场景。
+    """
     if not os.path.exists(path):
         return
+    if os.path.isdir(path):
+        shutil.rmtree(path, onerror=_handle_remove_readonly)
+        return
     try:
-        shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
-    except:
-        os.system(f'rm -rf "{path}"' if os.name != 'nt' else f'rd /s /q "{path}"')
+        os.chmod(path, stat.S_IWRITE)
+    except OSError:
+        pass
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def main(platform, owner, repo, output_file="lfs_mapping.json", username=None, token=None):
     """主函数，支持平台参数"""
+    repo_dir = None
     try:
         if platform == "gitcode" and not token:
             print("警告: GitCode强烈建议使用Token认证而非密码[6](@ref)")
@@ -172,7 +203,7 @@ def main(platform, owner, repo, output_file="lfs_mapping.json", username=None, t
         print(f"错误: {str(e)}", file=sys.stderr)
         return False
     finally:
-        if 'repo_dir' in locals():
+        if repo_dir:
             force_remove(repo_dir)
 
 if __name__ == "__main__":

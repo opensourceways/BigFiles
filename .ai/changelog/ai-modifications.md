@@ -26,6 +26,18 @@
 
 <!-- 以下为实际记录，按时间倒序排列 -->
 
+### 2026-08-10 fix：补 `.gitleaksignore` 忽略历史 commit 中的示例密钥（第一次修复的 follow-up）
+
+- **模式**: fix
+- **修改意图**: 上一 commit（`485d741`）仅替换了工作目录中的示例密钥占位符，但 gitleaks 扫描的是**整个 git 历史（166 commits）**——历史 commit `44db7ce` 中的 5 处原始字符串依然存在，PR #83 门禁再次 FAIL。补 `.gitleaksignore` 用 fingerprint 忽略这 5 处历史 finding。fingerprint 含 commit sha，只要历史不重写就稳定，是清理已入库泄露的**唯一**低风险方案（另一方案是 `git rebase` + force-push，风险高）
+- **归档提示词**: 沿用 `.ai/prompts/prompt-fix-20260810.md`
+- **核心改动**:
+  - 新增 `.gitleaksignore`：5 条 fingerprint，全部指向 commit `44db7ce` 中的 `.ai/skills/local-ci-go/` 示例文档
+  - 更新 `.ai/lessons-learned.md` LL-006：补充"gitleaks 扫描 full history"关键遗漏，修正"不要依赖 fingerprint"的片面结论
+  - 更新 `.ai/anti-patterns.md` AP-004：追加"历史清理需 `.gitleaksignore`"的说明
+- **自验证**: `.gitleaksignore` 格式与 gitleaks 官方文档一致；等 CI 验证
+- **经验沉淀**: LL-006 已补充；未新增 AP（属于 LL-006 补充说明范畴）
+
 ### 2026-08-10 fix：升级 Go 至 1.26.5 修复 26 个 stdlib CVE
 
 - **模式**: fix

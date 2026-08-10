@@ -90,11 +90,17 @@
 
 ## LL-006 [2026-08-10] 文档/脚本中的示例密钥字符串被 gitleaks 判定为泄露
 
-- **症状**：PR #83 CI 门禁阶段 gitleaks 扫描出 5 处 `generic-api-key` 匹配（entropy=4.247），全部位于 `.ai/skills/local-ci-go/` 目录下用于教学演示的文档与脚本（形如 `sk-1234...cdef`），阻塞合入
-- **根因**：文档 / 演示脚本中直接书写符合 API key 形态的字符串（`sk-` 前缀 + 16 位 hex，熵值高），gitleaks 的 `generic-api-key` 规则依据前缀 + 熵判定，无法区分"真实密钥"与"教学示例"
-- **正确做法**：文档、脚本、测试夹具中出现的示例凭证必须使用**低熵、明显是占位符**的字符串，如 `sk-YOUR_API_KEY_HERE`、`sk-EXAMPLE_PLACEHOLDER`、`<your-api-key>`。不要依赖 `.gitleaksignore` fingerprint（fingerprint 含 commit hash，一旦相关行变更或 rebase 即失效，需持续维护）
-- **检测命令**：`grep -rnE 'sk-[0-9a-f]{16,}' --include='*.md' --include='*.sh' --include='*.ps1' --include='*.go' .`（应返回空）
-- **触发的规则更新**：新增 [[AP-004]]
+- **症状**：PR #83 CI 门禁阶段 gitleaks 扫描出 5 处 `generic-api-key` 匹配（entropy=4.247），全部位于 `.ai/skills/local-ci-go/` 目录下用于教学演示的文档与脚本（形如 `sk-` + 16 位 hex）。**第一次修复**（改工作目录占位符）推送后仍 FAIL —— 因为 gitleaks 扫的是**整个 git 历史（166 commits）**而非仅工作目录，历史 commit `44db7ce` 中的原始字符串依然存在
+- **根因**：
+  1. 文档 / 演示脚本中直接书写符合 API key 形态的字符串（`sk-` 前缀 + 16 位 hex，熵值 4.247），gitleaks 的 `generic-api-key` 规则依据前缀 + 熵判定，无法区分"真实密钥"与"教学示例"
+  2. **关键遗漏**：gitleaks 默认扫描 `git log --all` 覆盖的所有 commit，仅修改当前文件不会消除历史 commit 中的匹配。fingerprint 包含 commit sha（`<sha>:<file>:<rule>:<line>`），历史 commit 不变时 fingerprint 是稳定的，`.gitleaksignore` 反而是**唯一**能清理已入库泄露的手段（除非重写历史 force-push，风险大）
+- **正确做法**（双管齐下）：
+  1. **未来预防**：文档 / 脚本 / 测试夹具中出现的示例凭证必须使用**低熵占位符**（如 `sk-YOUR_API_KEY_HERE`、`<your-api-key>`），避免将来新增 commit 时再次触发
+  2. **历史清理**：对已入库、来自已合并 commit 的匹配，在仓库根目录维护 `.gitleaksignore`，每行一条 fingerprint。**修正之前的错误认知**："fingerprint 含 commit hash 易失效" 仅适用于"匹配来自**未合并**的开发中 commit 会被 rebase 掉"的场景；对已进入 main/master 历史的 commit，fingerprint 是稳定的
+- **检测命令**：
+  - 工作目录预防：`grep -rnE 'sk-[0-9a-f]{16,}' --include='*.md' --include='*.sh' --include='*.ps1' --include='*.go' .`（应返回空）
+  - 历史扫描（模拟 CI）：`gitleaks detect --source . --no-git=false`（应返回 exit 0 或所有 finding 命中 `.gitleaksignore`）
+- **触发的规则更新**：新增 [[AP-004]]；新增 `.gitleaksignore` 文件；本记录已修正之前"不要依赖 .gitleaksignore"的片面结论
 
 ## LL-007 [2026-08-10] 用 os.system + f-string 拼接 shell 命令导致命令注入
 

@@ -143,6 +143,8 @@ func (s *Service) InsertMetaData(...) error {
 
 在文档、演示脚本、测试夹具中演示"如何存储 / 泄露 API key"时，禁止使用形如 `sk-` + hex 的高熵字符串——会被 gitleaks 的 `generic-api-key` 规则判定为真实密钥泄露，阻塞门禁。
 
+**注**：若字符串已进入 git 历史（如已合并到 main 的 commit），仅修改工作目录**无法**消除告警，gitleaks 扫描 `git log --all`。必须在仓库根目录维护 `.gitleaksignore` 文件，加入对应 fingerprint（格式 `<commit-sha>:<file>:<rule>:<line>`）。详见 [[LL-006]]。
+
 ❌ 错误：
 ```markdown
 const apiKey = "sk-1234...cdef"

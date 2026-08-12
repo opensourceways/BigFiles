@@ -23,6 +23,9 @@ type Config struct {
 	OpenEulerAccountConfig OpenEulerAccountConfig `json:"OPENEULER_ACCOUNT_PARAM"`
 	DBConfig               DBConfig               `json:"DATABASE"`
 	GitCodeSwitch          bool                   `json:"GIT_CODE_SWITCH" default:"false"`
+	GithubModel            bool                   `json:"GITHUB_MODEL" default:"false"`
+	DefaultGithubToken     string                 `json:"DEFAULT_GITHUB_TOKEN"`
+	AllowedRepos           []string               `json:"ALLOWED_REPOS"`
 }
 
 type ValidateConfig struct {

@@ -1,0 +1,16 @@
+{
+  "name": "project-init",
+  "version": "1.0.0",
+  "description": "Project initialization and context loader synchronized from OM-Webserver standards",
+  "main": "skill.md",
+  "auto_load": true,
+  "config": {
+    "required_files": [
+      "CLAUDE.md",
+      "AGENTS.md",
+      "ai-modifications.md",
+      ".ai/architect/project-architecture-overview.md"
+    ],
+    "env_detection": true
+  }
+}

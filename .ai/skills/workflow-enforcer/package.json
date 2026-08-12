@@ -1,0 +1,16 @@
+{
+  "name": "workflow-enforcer",
+  "version": "1.0.0",
+  "description": "6-Phase workflow enforcer with Multi-Agent verification logic",
+  "main": "skill.md",
+  "auto_load": true,
+  "config": {
+    "tdd_mandatory": true,
+    "min_coverage_core": 0.9,
+    "multi_agent_roles": [
+      "Agent A - Test Generation",
+      "Agent B - Implementation",
+      "Agent C - Debug & Verification"
+    ]
+  }
+}

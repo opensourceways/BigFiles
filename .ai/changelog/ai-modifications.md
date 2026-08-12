@@ -26,6 +26,21 @@
 
 <!-- 以下为实际记录，按时间倒序排列 -->
 
+### 2026-08-12 test：为 scripts/lfsNameQuery.py 补充 pytest 测试，生成 coverage.xml 供外部 SAST CI 消费
+
+- **模式**: test
+- **修改意图**: PR #83 门禁的 Python 增量覆盖率检查（diff-cover）报错 `FileNotFoundError: coverage.xml`——因为项目无 pytest 基础设施，Python 变更（`scripts/lfsNameQuery.py` bandit 修复）无测试覆盖数据可供分析。补齐 pytest 配置 + 测试 + CI 中的 Python 测试 job，让 coverage.xml 在流水线中稳定产出
+- **归档提示词**: 沿用 `.ai/prompts/prompt-fix-20260810.md`
+- **核心改动**:
+  - `scripts/lfsNameQuery.py`：将 `sys.exit(1)`（GIT_BIN 缺失时）从模块顶层下沉到 `_require_git()` 函数，在 `main()` 前置调用。原因：模块顶层退出会阻止 pytest 在无 git 的环境下 `import` 测试目标，导致测试无法收集
+  - `scripts/test_lfsNameQuery.py`（新增）：22 个用例覆盖 5 大函数（`force_remove` / `_handle_remove_readonly` / `branch_has_lfsconfig` / `clone_repo_skip_lfs` / `get_all_branches_lfs_mapping` / `main`），用 `unittest.mock` patch `subprocess.run` 避免真实 git 调用；覆盖率 88% (branch coverage)
+  - `pytest.ini`（新增）：`testpaths=scripts`，`addopts` 包含 `--cov=scripts --cov-report=xml:coverage.xml --cov-branch`，排除 venv/.ai 等目录
+  - `requirements-dev.txt`（新增）：仅含 `pytest>=7.4` 与 `pytest-cov>=4.1`（英文注释以避 Windows GBK 解码问题）
+  - `.github/workflows/workflow-validation.yml`：新增 `python-test` job（setup-python 3.11 + pytest 运行 + upload-artifact coverage.xml），并加入 summary 的 needs 列表
+  - `.gitignore`：新增 `coverage.xml` / `.coverage` / `.pytest_cache/` / `__pycache__/` / `*.pyc` / `venv/` / `.venv/`
+- **自验证**: `python -m pytest` → 22 passed，`coverage.xml` 生成于项目根 ✅；`go test ./... ✅` 无影响
+- **经验沉淀**: 无新增 LL/AP（属于工具链补齐）
+
 ### 2026-08-10 test：补充单元测试将 PR #83 增量覆盖率从 61.8% 提升至 ≥ 80%
 
 - **模式**: test

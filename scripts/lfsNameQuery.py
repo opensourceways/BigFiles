@@ -7,10 +7,14 @@ import stat
 from urllib.parse import quote_plus
 
 # 解析 git 可执行文件绝对路径，避免依赖 PATH 顺序（Bandit B607）
+# 在模块顶层解析，缺失时在 main() 中报错退出，允许测试环境 mock GIT_BIN 后 import
 GIT_BIN = shutil.which("git")
-if not GIT_BIN:
-    print("错误: 未找到 git 可执行文件, 请确认已安装 git 并加入 PATH", file=sys.stderr)
-    sys.exit(1)
+
+
+def _require_git():
+    if not GIT_BIN:
+        print("错误: 未找到 git 可执行文件, 请确认已安装 git 并加入 PATH", file=sys.stderr)
+        sys.exit(1)
 
 # 平台配置映射
 PLATFORM_CONFIGS = {
@@ -186,6 +190,7 @@ def force_remove(path):
 
 def main(platform, owner, repo, output_file="lfs_mapping.json", username=None, token=None):
     """主函数，支持平台参数"""
+    _require_git()
     repo_dir = None
     try:
         if platform == "gitcode" and not token:

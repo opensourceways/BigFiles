@@ -181,22 +181,19 @@ func Test_must(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		// 测试传入nil，期望不会触发panic，也就是正常执行
 		{
 			name:    "no error",
 			args:    args{err: nil},
 			wantErr: false,
 		},
-		// 测试传入一个具体错误，期望触发panic
 		{
-			name:    "panic error",
-			args:    args{err: errors.New("panic error test")},
+			name:    "log error",
+			args:    args{err: errors.New("log error test")},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer panicCheck(t, tt.wantErr)
 			must(tt.args.err)
 		})
 	}
@@ -398,8 +395,8 @@ func Test_server_downloadObject(t *testing.T) {
 			downloadUrl, _ := url.Parse("test.url")
 			generateDownloadUrlPtr := reflect.ValueOf((*server).generateDownloadUrl)
 			monkey.Patch(generateDownloadUrlPtr.Interface(),
-				func(s *server, getObjectInput *obs.CreateSignedUrlInput) *url.URL {
-					return downloadUrl
+				func(s *server, getObjectInput *obs.CreateSignedUrlInput) (*url.URL, error) {
+					return downloadUrl, nil
 				})
 			defer monkey.Unpatch(generateDownloadUrlPtr.Interface())
 			s := &server{
@@ -456,7 +453,8 @@ func Test_server_generateDownloadUrl(t *testing.T) {
 				isAuthorized: tt.fields.isAuthorized,
 			}
 			defer panicCheck(t, tt.wantErr)
-			if got := s.generateDownloadUrl(tt.args.getObjectInput); got != nil {
+			got, err := s.generateDownloadUrl(tt.args.getObjectInput)
+			if err == nil && got != nil {
 				t.Errorf("generateDownloadUrl() = %v", got)
 			}
 		})
@@ -1145,9 +1143,9 @@ func TestDownload(t *testing.T) {
 			defer monkey.UnpatchAll()
 
 			// 模拟 generateDownloadUrl 的行为
-			monkey.Patch((*server).generateDownloadUrl, func(s *server, input *obs.CreateSignedUrlInput) *url.URL {
+			monkey.Patch((*server).generateDownloadUrl, func(s *server, input *obs.CreateSignedUrlInput) (*url.URL, error) {
 				u, _ := url.Parse(tt.mockOutput)
-				return u
+				return u, nil
 			})
 			defer monkey.UnpatchAll()
 

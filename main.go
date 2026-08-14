@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
@@ -60,33 +62,32 @@ func gatherOptions(fs *flag.FlagSet, args ...string) (options, error) {
 	return o, err
 }
 
-func initConfig(cfg *config.Config) {
+func initConfig(cfg *config.Config) error {
 	if err := server.Init(cfg); err != nil {
-		logrus.Errorf("load ValidateConfig, err:%s", err.Error())
-		return
+		return fmt.Errorf("load ValidateConfig: %w", err)
 	}
 
 	if err := auth.Init(cfg); err != nil {
-		logrus.Errorf("load gitee config, err:%s", err.Error())
-		return
+		return fmt.Errorf("load gitee config: %w", err)
 	}
 
 	if err := db.Init(cfg.DBConfig); err != nil {
-		logrus.Errorf("init database config, err:%s", err.Error())
-		return
+		return fmt.Errorf("init database config: %w", err)
 	}
+
+	return nil
 }
 
-func initObsClient(cfg *config.Config) {
+func initObsClient(cfg *config.Config) error {
 	var err error
 	server.ObsClient, err = obs.New(cfg.ObsAccessKeyId, cfg.ObsSecretAccessKey,
 		cfg.ObsRegion, obs.WithSignature(obs.SignatureObs))
 	server.Bucket = cfg.LfsBucket
 	server.Prefit = cfg.Prefix
 	if err != nil {
-		logrus.Errorf("failed to initialize OBS client: %v", err.Error())
-		return
+		return fmt.Errorf("failed to initialize OBS client: %w", err)
 	}
+	return nil
 }
 
 func main() {
@@ -95,13 +96,11 @@ func main() {
 		os.Args[1:]...,
 	)
 	if err != nil {
-		logrus.Errorf("new options failed, err:%s", err.Error())
-		return
+		logrus.Fatalf("new options failed, err:%s", err.Error())
 	}
 
 	if err := o.Validate(); err != nil {
-		logrus.Errorf("Invalid options, err:%s", err.Error())
-		return
+		logrus.Fatalf("Invalid options, err:%s", err.Error())
 	}
 
 	if o.enableDebug {
@@ -109,17 +108,42 @@ func main() {
 		logrus.Debug("debug enable.")
 	}
 
+	// Reap zombie child processes (e.g. git commands invoked by GetLFSMapping).
+	// Without this, zombie [git] processes accumulate and exhaust the node PID
+	// table, causing PIDPressure evictions.
+	sigChld := make(chan os.Signal, 1)
+	signal.Notify(sigChld, syscall.SIGCHLD)
+	go func() {
+		for range sigChld {
+			for {
+				// WNOHANG = 1: non-blocking wait — returns immediately if no child has exited.
+				pid, _ := syscall.Wait4(-1, nil, syscall.WNOHANG, nil)
+				if pid <= 0 {
+					break
+				}
+			}
+		}
+	}()
+
 	//cfg
 	cfg := new(config.Config)
 
 	if err := config.LoadConfig(o.service.ConfigFile, cfg, o.service.RemoveCfg); err != nil {
-		logrus.Errorf("load config, err:%s", err.Error())
-		return
+		logrus.Fatalf("load config, err:%s", err.Error())
 	}
 
-	initObsClient(cfg)
+	if err := initObsClient(cfg); err != nil {
+		logrus.Fatalf("init OBS client failed: %v", err)
+	}
 
-	initConfig(cfg)
+	if err := initConfig(cfg); err != nil {
+		logrus.Fatalf("init config failed: %v", err)
+	}
+
+	// Run database schema migration once at startup instead of on every insert.
+	if err := db.RunMigration(); err != nil {
+		logrus.Fatalf("run database migration failed: %v", err)
+	}
 
 	s, err := server.New(server.Options{
 		Prefix:          cfg.Prefix,
@@ -132,6 +156,9 @@ func main() {
 		IsGithubAuthorized: auth.GithubAuth(),
 		SecretAccessKey:    cfg.ObsSecretAccessKey,
 	})
+	if err != nil {
+		logrus.Fatalf("create server failed: %v", err)
+	}
 
 	go server.StartScheduledTask()
 	go server.ScheduledCheckOidAndFileName()
@@ -144,12 +171,19 @@ func main() {
 		IdleTimeout:  30 * time.Second,
 	}
 
-	if err != nil {
-		log.Fatalln(err)
-	}
+	// Graceful shutdown: listen for SIGTERM/SIGINT and call srv.Shutdown()
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		<-quit
+		log.Println("shutting down server...")
+		if err := srv.Shutdown(nil); err != nil {
+			logrus.Errorf("server shutdown error: %v", err)
+		}
+	}()
 
 	log.Println("serving on http://0.0.0.0:5000 ...")
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalln(err)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logrus.Fatalf("server error: %v", err)
 	}
 }

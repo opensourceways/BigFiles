@@ -3,6 +3,7 @@ package server
 import (
 	"bou.ke/monkey"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"github.com/metalogical/BigFiles/batch"
 	"github.com/metalogical/BigFiles/db"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"math"
 	"net/http"
@@ -643,40 +645,71 @@ func Test_server_handleRequestObject(t *testing.T) {
 }
 
 func Test_server_healthCheck(t *testing.T) {
-	type args struct {
-		w http.ResponseWriter
-		r *http.Request
-	}
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	tests := []struct {
-		name    string
-		fields  ServerInfo
-		args    args
-		wantErr bool
+		name         string
+		dbOK         bool
+		obsOK        bool
+		wantStatus   int
+		wantContains string
 	}{
 		{
-			name:   "server healthCheck success",
-			fields: serverInfo,
-			args: args{
-				r: req,
-			},
-			wantErr: false,
+			name:         "unhealthy - both nil",
+			dbOK:         false,
+			obsOK:        false,
+			wantStatus:   http.StatusServiceUnavailable,
+			wantContains: "db=false obs=false",
+		},
+		{
+			name:         "unhealthy - db nil, obs nil",
+			dbOK:         false,
+			obsOK:        true,
+			wantStatus:   http.StatusServiceUnavailable,
+			wantContains: "db=false",
+		},
+		{
+			name:         "unhealthy - obs nil, db nil",
+			dbOK:         true,
+			obsOK:        false,
+			wantStatus:   http.StatusServiceUnavailable,
+			wantContains: "obs=false",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &server{
-				ttl:          tt.fields.ttl,
-				client:       tt.fields.client,
-				bucket:       tt.fields.bucket,
-				prefix:       tt.fields.prefix,
-				cdnDomain:    tt.fields.cdnDomain,
-				isAuthorized: tt.fields.isAuthorized,
+				ttl:    time.Hour,
+				bucket: "test-bucket",
 			}
+
+			if tt.dbOK {
+				sqlDB, _ := sql.Open("mysql", "")
+				db.Db, _ = gorm.Open(mysql.New(mysql.Config{
+					Conn: sqlDB,
+				}), &gorm.Config{})
+				monkey.Patch((*sql.DB).Ping, func(*sql.DB) error { return nil })
+				defer monkey.Unpatch((*sql.DB).Ping)
+			} else {
+				db.Db = nil
+			}
+
+			if tt.obsOK {
+				ObsClient = &obs.ObsClient{}
+				Bucket = ""
+			} else {
+				ObsClient = nil
+				Bucket = "test-bucket"
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			w := httptest.NewRecorder()
-			tt.args.w = w
-			defer panicCheck(t, tt.wantErr)
-			s.healthCheck(tt.args.w, tt.args.r)
+			s.healthCheck(w, req)
+
+			assert.Equal(t, tt.wantStatus, w.Code)
+			assert.Contains(t, w.Body.String(), tt.wantContains)
+
+			db.Db = nil
+			ObsClient = nil
+			Bucket = ""
 		})
 	}
 }
@@ -1709,4 +1742,156 @@ func TestApplySearchFilter(t *testing.T) {
 			assert.NotNil(t, result)
 		})
 	}
+}
+
+func Test_server_generateDownloadUrl_error(t *testing.T) {
+	generateDownloadUrlPtr := reflect.ValueOf((*server).generateDownloadUrl)
+	monkey.Patch(generateDownloadUrlPtr.Interface(),
+		func(s *server, input *obs.CreateSignedUrlInput) (*url.URL, error) {
+			return nil, errors.New("failed to create signed download URL: obs error")
+		})
+	defer monkey.Unpatch(generateDownloadUrlPtr.Interface())
+
+	s := &server{
+		ttl:       time.Hour,
+		bucket:    "test-bucket",
+		cdnDomain: "cdn.example.com",
+		client:    &obs.ObsClient{},
+	}
+
+	input := &obs.CreateSignedUrlInput{
+		Method:  obs.HttpMethodGet,
+		Bucket:  "test-bucket",
+		Key:     "test-key",
+		Expires: 3600,
+	}
+
+	result, err := s.generateDownloadUrl(input)
+	assert.Nil(t, result)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create signed download URL")
+}
+
+func Test_server_uploadObject_error(t *testing.T) {
+	getObjectMetadataInputPtr := reflect.ValueOf((*server).getObjectMetadataInput)
+	monkey.Patch(getObjectMetadataInputPtr.Interface(),
+		func(s *server, key string) (*obs.GetObjectMetadataOutput, error) {
+			return nil, errors.New("not found")
+		})
+	defer monkey.Unpatch(getObjectMetadataInputPtr.Interface())
+
+	generateUploadUrlPtr := reflect.ValueOf((*server).generateUploadUrl)
+	monkey.Patch(generateUploadUrlPtr.Interface(),
+		func(s *server, input *obs.CreateSignedUrlInput) (*obs.CreateSignedUrlOutput, error) {
+			return nil, errors.New("obs api unavailable")
+		})
+	defer monkey.Unpatch(generateUploadUrlPtr.Interface())
+
+	s := &server{
+		ttl:    time.Hour,
+		bucket: "test-bucket",
+		prefix: "prefix/",
+		client: &obs.ObsClient{},
+	}
+
+	in := &batch.RequestObject{OID: strings.Repeat("a", 64), Size: 100}
+	out := &batch.Object{OID: in.OID, Size: in.Size}
+
+	s.uploadObject(in, out)
+
+	assert.NotNil(t, out.Error)
+	assert.Equal(t, 500, out.Error.Code)
+	assert.Contains(t, out.Error.Message, "failed to create signed upload URL")
+}
+
+func Test_checkRepoOidNameWithDepth(t *testing.T) {
+	tests := []struct {
+		name      string
+		owner     string
+		depth     int
+		wantPanic bool
+	}{
+		{
+			name:  "depth under limit proceeds normally",
+			owner: "src-openeuler",
+			depth: 0,
+		},
+		{
+			name:  "depth at limit returns nil without recursion",
+			owner: "some-user",
+			depth: maxRepoOidNameDepth,
+		},
+		{
+			name:  "depth over limit returns nil",
+			owner: "some-user",
+			depth: maxRepoOidNameDepth + 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					if !tt.wantPanic {
+						t.Errorf("unexpected panic: %v", r)
+					}
+				}
+			}()
+
+			userInRepo := auth.UserInRepo{
+				Owner: tt.owner,
+				Repo:  "test-repo",
+				Token: "fake-token",
+			}
+
+			monkey.Patch(auth.GetLFSMapping, func(auth.UserInRepo, ...string) (map[string]auth.FileInfo, error) {
+				return nil, nil
+			})
+			defer monkey.UnpatchAll()
+
+			if tt.owner != "src-openeuler" && tt.depth < maxRepoOidNameDepth {
+				monkey.Patch(auth.CheckRepoOwner, func(auth.UserInRepo) (auth.Repo, error) {
+					return auth.Repo{}, errors.New("forbidden: repo has no permission")
+				})
+			}
+
+			result := checkRepoOidNameWithDepth(userInRepo, tt.depth)
+
+			if tt.depth >= maxRepoOidNameDepth && tt.owner != "src-openeuler" {
+				assert.Nil(t, result)
+			}
+		})
+	}
+}
+
+func Test_server_downloadObject_signedUrlError(t *testing.T) {
+	getObjectMetadataInputPtr := reflect.ValueOf((*server).getObjectMetadataInput)
+	monkey.Patch(getObjectMetadataInputPtr.Interface(),
+		func(s *server, key string) (*obs.GetObjectMetadataOutput, error) {
+			return &obs.GetObjectMetadataOutput{ContentLength: 100}, nil
+		})
+	defer monkey.Unpatch(getObjectMetadataInputPtr.Interface())
+
+	generateDownloadUrlPtr := reflect.ValueOf((*server).generateDownloadUrl)
+	monkey.Patch(generateDownloadUrlPtr.Interface(),
+		func(s *server, input *obs.CreateSignedUrlInput) (*url.URL, error) {
+			return nil, errors.New("failed to create signed download URL: signed url error")
+		})
+	defer monkey.Unpatch(generateDownloadUrlPtr.Interface())
+
+	s := &server{
+		ttl:       time.Hour,
+		bucket:    "test-bucket",
+		prefix:    "prefix/",
+		cdnDomain: "cdn.example.com",
+		client:    &obs.ObsClient{},
+	}
+
+	in := &batch.RequestObject{OID: strings.Repeat("a", 64), Size: 100}
+	out := &batch.Object{OID: in.OID, Size: in.Size}
+
+	s.downloadObject(in, out)
+
+	assert.NotNil(t, out.Error)
+	assert.Equal(t, 500, out.Error.Code)
+	assert.Contains(t, out.Error.Message, "failed to create signed download URL")
 }

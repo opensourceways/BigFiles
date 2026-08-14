@@ -371,7 +371,7 @@ func (s *server) uploadObject(in *batch.RequestObject, out *batch.Object) {
 	putObjectInput.Key = s.key(in.OID)
 	putObjectInput.Expires = int(s.ttl / time.Second)
 	putObjectInput.Headers = map[string]string{contentType: obsHeader}
-	putObjectOutput, err := s.client.CreateSignedUrl(putObjectInput)
+	putObjectOutput, err := s.generateUploadUrl(putObjectInput)
 	if err != nil {
 		out.Error = &batch.ObjectError{
 			Code:    500,
@@ -412,6 +412,11 @@ func (s *server) generateDownloadUrl(getObjectInput *obs.CreateSignedUrlInput) (
 	return v, nil
 }
 
+//go:noinline
+func (s *server) generateUploadUrl(putObjectInput *obs.CreateSignedUrlInput) (*obs.CreateSignedUrlOutput, error) {
+	return s.client.CreateSignedUrl(putObjectInput)
+}
+
 func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(contentType, jsonHeader)
 
@@ -426,10 +431,11 @@ func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	obsOK := true
-	if ObsClient != nil {
+	if ObsClient != nil && Bucket != "" {
 		input := &obs.GetBucketMetadataInput{Bucket: Bucket}
 		_, err := ObsClient.GetBucketMetadata(input)
 		if err != nil {
+			logrus.Debugf("health check OBS GetBucketMetadata failed: %v", err)
 			obsOK = false
 		}
 	} else {

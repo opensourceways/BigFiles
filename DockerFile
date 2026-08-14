@@ -2,9 +2,7 @@ FROM golang:1.24 as BUILDER
 
 WORKDIR /home
 COPY . .
-RUN go get github.com/akrylysov/algnhsa && \
-    go get github.com/sirupsen/logrus && \
-    go build ./main.go
+RUN go mod download && go build ./main.go
 
 FROM openeuler/openeuler:24.03
 LABEL maintainer="Zhou Yi 1123678689@qq.com"

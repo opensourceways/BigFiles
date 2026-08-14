@@ -427,7 +427,8 @@ func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {
 
 	obsOK := true
 	if ObsClient != nil {
-		_, err := ObsClient.ListBuckets(nil)
+		input := &obs.GetBucketMetadataInput{Bucket: Bucket}
+		_, err := ObsClient.GetBucketMetadata(input)
 		if err != nil {
 			obsOK = false
 		}

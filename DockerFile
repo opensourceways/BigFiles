@@ -1,4 +1,4 @@
-FROM golang:1.24 as BUILDER
+FROM golang:1.26 AS builder
 
 WORKDIR /home
 COPY . .
@@ -7,7 +7,9 @@ RUN go mod download && go build ./main.go
 FROM openeuler/openeuler:24.03
 LABEL maintainer="Zhou Yi 1123678689@qq.com"
 
-RUN dnf install -y git wget tar gzip tini && \
+RUN dnf install -y git wget tar gzip && \
+    wget -O /usr/bin/tini https://github.com/krallin/tini/releases/download/v0.19.0/tini-amd64 && \
+    chmod +x /usr/bin/tini && \
     wget https://github.com/git-lfs/git-lfs/releases/download/v3.3.0/git-lfs-linux-amd64-v3.3.0.tar.gz && \
     tar -xzf git-lfs-linux-amd64-v3.3.0.tar.gz && \
     cd git-lfs-3.3.0 && \

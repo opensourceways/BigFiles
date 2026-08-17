@@ -68,3 +68,85 @@ func TestInit_gormOpenError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to database")
 }
+
+func TestDB_ReturnsCurrentInstance(t *testing.T) {
+	origDb := Db
+	mockDb := &gorm.DB{}
+	Db = mockDb
+	defer func() { Db = origDb }()
+
+	assert.Equal(t, mockDb, DB())
+}
+
+func setupDryRunDB(t *testing.T) {
+	t.Helper()
+	origDb := Db
+	dryDb, err := gorm.Open(nil, &gorm.Config{DryRun: true})
+	assert.Nil(t, err)
+	assert.NotNil(t, dryDb)
+	Db = dryDb
+	t.Cleanup(func() { Db = origDb })
+}
+
+func TestInsertLFSObj_DryRun(t *testing.T) {
+	setupDryRunDB(t)
+	obj := LfsObj{Oid: "dryrun-oid", Repo: "repo", Owner: "owner", Size: 100}
+	_ = InsertLFSObj(obj)
+}
+
+func TestDeleteLFSObj_DryRun(t *testing.T) {
+	setupDryRunDB(t)
+	obj := LfsObj{Oid: "dryrun-oid", Repo: "repo", Owner: "owner"}
+	_ = DeleteLFSObj(obj)
+}
+
+func TestCountLFSObj_DryRun(t *testing.T) {
+	setupDryRunDB(t)
+	obj := LfsObj{Oid: "dryrun-oid"}
+	_, _ = CountLFSObj(obj)
+}
+
+func TestGetUploadLfsObj_DryRun(t *testing.T) {
+	setupDryRunDB(t)
+	_, _ = GetUploadLfsObj()
+}
+
+func TestSelectLfsObjByOid_DryRun(t *testing.T) {
+	setupDryRunDB(t)
+	_, _ = SelectLfsObjByOid("dryrun-oid")
+}
+
+func TestUpdateLFSObjFileName_EmptyOID(t *testing.T) {
+	err := UpdateLFSObjFileName("", "new.txt", "user")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "OID")
+}
+
+func TestUpdateLFSObjFileName_EmptyFileName(t *testing.T) {
+	err := UpdateLFSObjFileName("oid123", "", "user")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "文件名")
+}
+
+func TestUpdateLFSObjFileName_DryRun(t *testing.T) {
+	setupDryRunDB(t)
+	_ = UpdateLFSObjFileName("oid123", "new.txt", "user")
+}
+
+func TestUpdateLFSObjFileName_SameFileName(t *testing.T) {
+	setupDryRunDB(t)
+
+	monkey.Patch((*gorm.DB).Where, func(db *gorm.DB, query interface{}, args ...interface{}) *gorm.DB {
+		return db
+	})
+	monkey.Patch((*gorm.DB).First, func(db *gorm.DB, dest interface{}, conds ...interface{}) *gorm.DB {
+		if ptr, ok := dest.(*LfsObj); ok {
+			ptr.FileName = "same.txt"
+		}
+		return &gorm.DB{}
+	})
+	defer monkey.UnpatchAll()
+
+	err := UpdateLFSObjFileName("oid123", "same.txt", "user")
+	assert.NoError(t, err, "same file name should skip update")
+}

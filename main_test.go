@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"reflect"
 	"testing"
 
@@ -123,4 +124,68 @@ func Test_initObsClient_success(t *testing.T) {
 	server.ObsClient = nil
 	server.Bucket = ""
 	server.Prefit = ""
+}
+
+func TestServiceOptions_Validate_EmptyConfigFile(t *testing.T) {
+	o := ServiceOptions{ConfigFile: ""}
+	err := o.Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "missing config-file")
+}
+
+func TestServiceOptions_Validate_ValidConfigFile(t *testing.T) {
+	o := ServiceOptions{ConfigFile: "/some/path.yaml"}
+	err := o.Validate()
+	assert.NoError(t, err)
+}
+
+func TestOptions_Validate_DelegatesToServiceOptions(t *testing.T) {
+	o := options{service: ServiceOptions{ConfigFile: ""}}
+	err := o.Validate()
+	assert.Error(t, err)
+
+	o2 := options{service: ServiceOptions{ConfigFile: "/path/to/config"}}
+	err2 := o2.Validate()
+	assert.NoError(t, err2)
+}
+
+func TestServiceOptions_AddFlags(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	var o ServiceOptions
+	o.AddFlags(fs)
+
+	configFile := fs.Lookup("config-file")
+	assert.NotNil(t, configFile, "config-file flag should be registered")
+
+	rmCfg := fs.Lookup("rm-cfg")
+	assert.NotNil(t, rmCfg, "rm-cfg flag should be registered")
+}
+
+func TestGatherOptions_Defaults(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	o, err := gatherOptions(fs)
+	assert.NoError(t, err)
+	assert.False(t, o.enableDebug)
+	assert.Equal(t, "", o.service.ConfigFile)
+}
+
+func TestGatherOptions_WithConfigFile(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	o, err := gatherOptions(fs, "--config-file", "/etc/app/config.yaml")
+	assert.NoError(t, err)
+	assert.Equal(t, "/etc/app/config.yaml", o.service.ConfigFile)
+}
+
+func TestGatherOptions_EnableDebug(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	o, err := gatherOptions(fs, "--enable_debug")
+	assert.NoError(t, err)
+	assert.True(t, o.enableDebug)
+}
+
+func TestGatherOptions_RmCfg(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	o, err := gatherOptions(fs, "--rm-cfg")
+	assert.NoError(t, err)
+	assert.True(t, o.service.RemoveCfg)
 }

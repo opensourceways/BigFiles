@@ -3,9 +3,11 @@ package main
 import (
 	"errors"
 	"flag"
+	"net"
 	"net/http"
 	"os"
 	"reflect"
+	"syscall"
 	"testing"
 	"time"
 
@@ -208,8 +210,41 @@ func TestReapZombies_ExitsOnChannelClose(t *testing.T) {
 	}
 }
 
+func TestReapZombies_ProcessesSignal(t *testing.T) {
+	sigChld := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	go func() {
+		reapZombies(sigChld)
+		close(done)
+	}()
+
+	sigChld <- syscall.SIGCHLD
+	close(sigChld)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reapZombies did not exit")
+	}
+}
+
 func TestSetupGracefulShutdown(t *testing.T) {
 	srv := &http.Server{}
 	quit := setupGracefulShutdown(srv)
 	assert.NotNil(t, quit, "should return the quit channel")
+}
+
+func TestSetupGracefulShutdown_TriggersShutdown(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &http.Server{}
+	go srv.Serve(ln)
+	time.Sleep(50 * time.Millisecond)
+
+	setupGracefulShutdown(srv)
+
+	syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	time.Sleep(300 * time.Millisecond)
 }

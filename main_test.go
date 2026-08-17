@@ -17,8 +17,16 @@ import (
 	"github.com/metalogical/BigFiles/config"
 	"github.com/metalogical/BigFiles/db"
 	"github.com/metalogical/BigFiles/server"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
+
+func patchFatalf() {
+	monkey.PatchInstanceMethod(reflect.TypeOf(logrus.StandardLogger()), "Fatalf",
+		func(_ *logrus.Logger, format string, args ...interface{}) {
+			panic(format)
+		})
+}
 
 func Test_initConfig_serverInitError(t *testing.T) {
 	monkey.Patch(server.Init, func(cfg *config.Config) error {
@@ -247,4 +255,223 @@ func TestSetupGracefulShutdown_TriggersShutdown(t *testing.T) {
 
 	syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
 	time.Sleep(300 * time.Millisecond)
+}
+
+func TestMain_GatherOptionsError(t *testing.T) {
+	patchFatalf()
+	defer monkey.UnpatchAll()
+	defer resetWrappers()
+	startSchedulerFn = func() {}
+	startOidCheckerFn = func() {}
+
+	monkey.Patch(gatherOptions, func(fs *flag.FlagSet, args ...string) (options, error) {
+		return options{}, errors.New("flag error")
+	})
+
+	defer func() {
+		r := recover()
+		assert.NotNil(t, r, "should have panicked via logrus.Fatalf")
+	}()
+
+	main()
+}
+
+func TestMain_ValidateError(t *testing.T) {
+	patchFatalf()
+	defer monkey.UnpatchAll()
+	defer resetWrappers()
+	startSchedulerFn = func() {}
+	startOidCheckerFn = func() {}
+
+	monkey.Patch(gatherOptions, func(fs *flag.FlagSet, args ...string) (options, error) {
+		return options{}, nil
+	})
+
+	defer func() {
+		r := recover()
+		assert.NotNil(t, r, "should have panicked via logrus.Fatalf")
+	}()
+
+	main()
+}
+
+// validOptions returns options that pass Validate() and enableDebug=true
+// to cover the debug-level branch in main().
+func validOptions() options {
+	return options{
+		service:     ServiceOptions{ConfigFile: "/fake/config.yaml"},
+		enableDebug: true,
+	}
+}
+
+// patchSuccessUpTo patches all init functions before the given checkpoint
+// so that main() reaches the specified line.
+type mainCheckpoint string
+
+const (
+	checkpointLoadConfig   mainCheckpoint = "loadConfig"
+	checkpointInitObs      mainCheckpoint = "initObs"
+	checkpointInitConfig   mainCheckpoint = "initConfig"
+	checkpointRunMigration mainCheckpoint = "runMigration"
+	checkpointNewServer    mainCheckpoint = "newServer"
+	checkpointListenAndServe mainCheckpoint = "listenAndServe"
+)
+
+func resetWrappers() {
+	runMigrationFn = db.RunMigration
+	createServerFn = server.New
+	serveFn = func(srv *http.Server) error {
+		return srv.ListenAndServe()
+	}
+}
+
+func patchSuccessUpTo(cp mainCheckpoint) {
+	startSchedulerFn = func() {}
+	startOidCheckerFn = func() {}
+
+	monkey.Patch(gatherOptions, func(fs *flag.FlagSet, args ...string) (options, error) {
+		return validOptions(), nil
+	})
+
+	if cp == checkpointLoadConfig {
+		return
+	}
+	monkey.Patch(config.LoadConfig, func(path string, cfg *config.Config, remove bool) error {
+		return nil
+	})
+
+	if cp == checkpointInitObs {
+		return
+	}
+	monkey.Patch(initObsClient, func(cfg *config.Config) error {
+		return nil
+	})
+
+	if cp == checkpointInitConfig {
+		return
+	}
+	monkey.Patch(initConfig, func(cfg *config.Config) error {
+		return nil
+	})
+
+	if cp == checkpointRunMigration {
+		return
+	}
+	runMigrationFn = func() error { return nil }
+
+	if cp == checkpointNewServer {
+		return
+	}
+	createServerFn = func(o server.Options) (http.Handler, error) {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}), nil
+	}
+
+	if cp == checkpointListenAndServe {
+		return
+	}
+}
+
+func TestMain_LoadConfigError(t *testing.T) {
+	patchFatalf()
+	defer monkey.UnpatchAll()
+	patchSuccessUpTo(checkpointLoadConfig)
+
+	monkey.Patch(config.LoadConfig, func(path string, cfg *config.Config, remove bool) error {
+		return errors.New("load config failed")
+	})
+
+	defer func() {
+		r := recover()
+		assert.NotNil(t, r, "should have panicked via logrus.Fatalf")
+	}()
+
+	main()
+}
+
+func TestMain_InitObsClientError(t *testing.T) {
+	patchFatalf()
+	defer monkey.UnpatchAll()
+	patchSuccessUpTo(checkpointInitObs)
+
+	monkey.Patch(initObsClient, func(cfg *config.Config) error {
+		return errors.New("obs client failed")
+	})
+
+	defer func() {
+		r := recover()
+		assert.NotNil(t, r, "should have panicked via logrus.Fatalf")
+	}()
+
+	main()
+}
+
+func TestMain_InitConfigError(t *testing.T) {
+	patchFatalf()
+	defer monkey.UnpatchAll()
+	patchSuccessUpTo(checkpointInitConfig)
+
+	monkey.Patch(initConfig, func(cfg *config.Config) error {
+		return errors.New("init config failed")
+	})
+
+	defer func() {
+		r := recover()
+		assert.NotNil(t, r, "should have panicked via logrus.Fatalf")
+	}()
+
+	main()
+}
+
+func TestMain_RunMigrationError(t *testing.T) {
+	patchFatalf()
+	defer monkey.UnpatchAll()
+	defer resetWrappers()
+	patchSuccessUpTo(checkpointRunMigration)
+
+	runMigrationFn = func() error {
+		return errors.New("migration failed")
+	}
+
+	defer func() {
+		r := recover()
+		assert.NotNil(t, r, "should have panicked via logrus.Fatalf")
+	}()
+
+	main()
+}
+
+func TestMain_NewServerError(t *testing.T) {
+	patchFatalf()
+	defer monkey.UnpatchAll()
+	defer resetWrappers()
+	patchSuccessUpTo(checkpointNewServer)
+
+	createServerFn = func(o server.Options) (http.Handler, error) {
+		return nil, errors.New("new server failed")
+	}
+
+	defer func() {
+		r := recover()
+		assert.NotNil(t, r, "should have panicked via logrus.Fatalf")
+	}()
+
+	main()
+}
+
+func TestMain_ListenAndServeError(t *testing.T) {
+	patchFatalf()
+	defer monkey.UnpatchAll()
+	defer resetWrappers()
+	patchSuccessUpTo(checkpointListenAndServe)
+
+	serveFn = func(srv *http.Server) error {
+		return errors.New("listen and serve failed")
+	}
+
+	defer func() {
+		r := recover()
+		assert.NotNil(t, r, "should have panicked via logrus.Fatalf")
+	}()
+
+	main()
 }

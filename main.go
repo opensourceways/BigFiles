@@ -90,6 +90,38 @@ func initObsClient(cfg *config.Config) error {
 	return nil
 }
 
+var runMigrationFn = db.RunMigration
+
+func runMigration() error {
+	return runMigrationFn()
+}
+
+var createServerFn = server.New
+
+func createServer(opts server.Options) (http.Handler, error) {
+	return createServerFn(opts)
+}
+
+var startSchedulerFn = server.StartScheduledTask
+
+func startScheduler() {
+	startSchedulerFn()
+}
+
+var startOidCheckerFn = server.ScheduledCheckOidAndFileName
+
+func startOidChecker() {
+	startOidCheckerFn()
+}
+
+var serveFn = func(srv *http.Server) error {
+	return srv.ListenAndServe()
+}
+
+func serve(srv *http.Server) error {
+	return serveFn(srv)
+}
+
 func reapZombies(sigChld <-chan os.Signal) {
 	for range sigChld {
 		for {
@@ -155,11 +187,11 @@ func main() {
 	}
 
 	// Run database schema migration once at startup instead of on every insert.
-	if err := db.RunMigration(); err != nil {
+	if err := runMigration(); err != nil {
 		logrus.Fatalf("run database migration failed: %v", err)
 	}
 
-	s, err := server.New(server.Options{
+	s, err := createServer(server.Options{
 		Prefix:          cfg.Prefix,
 		Bucket:          cfg.LfsBucket,
 		Endpoint:        cfg.ObsRegion,
@@ -174,8 +206,8 @@ func main() {
 		logrus.Fatalf("create server failed: %v", err)
 	}
 
-	go server.StartScheduledTask()
-	go server.ScheduledCheckOidAndFileName()
+	go startScheduler()
+	go startOidChecker()
 
 	srv := &http.Server{
 		Addr:         "0.0.0.0:5000",
@@ -189,7 +221,7 @@ func main() {
 	setupGracefulShutdown(srv)
 
 	log.Println("serving on http://0.0.0.0:5000 ...")
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := serve(srv); err != nil && err != http.ErrServerClosed {
 		logrus.Fatalf("server error: %v", err)
 	}
 }

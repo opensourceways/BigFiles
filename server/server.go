@@ -332,7 +332,14 @@ func (s *server) downloadObject(in *batch.RequestObject, out *batch.Object) {
 	getObjectInput.Expires = int(s.ttl / time.Second)
 	getObjectInput.Headers = map[string]string{contentType: obsHeader}
 	// 生成下载对象的带授权信息的URL
-	v := s.generateDownloadUrl(getObjectInput)
+	v, err := s.generateDownloadUrl(getObjectInput)
+	if err != nil {
+		out.Error = &batch.ObjectError{
+			Code:    500,
+			Message: err.Error(),
+		}
+		return
+	}
 
 	out.Actions = &batch.Actions{
 		Download: &batch.Action{
@@ -364,9 +371,13 @@ func (s *server) uploadObject(in *batch.RequestObject, out *batch.Object) {
 	putObjectInput.Key = s.key(in.OID)
 	putObjectInput.Expires = int(s.ttl / time.Second)
 	putObjectInput.Headers = map[string]string{contentType: obsHeader}
-	putObjectOutput, err := s.client.CreateSignedUrl(putObjectInput)
+	putObjectOutput, err := s.generateUploadUrl(putObjectInput)
 	if err != nil {
-		panic(err)
+		out.Error = &batch.ObjectError{
+			Code:    500,
+			Message: fmt.Sprintf("failed to create signed upload URL: %v", err),
+		}
+		return
 	}
 
 	out.Actions = &batch.Actions{
@@ -387,39 +398,71 @@ func (s *server) getObjectMetadataInput(key string) (output *obs.GetObjectMetada
 }
 
 // 生成下载对象的带授权信息的URL
-func (s *server) generateDownloadUrl(getObjectInput *obs.CreateSignedUrlInput) *url.URL {
-	// 生成下载对象的带授权信息的URL
+func (s *server) generateDownloadUrl(getObjectInput *obs.CreateSignedUrlInput) (*url.URL, error) {
 	getObjectOutput, err := s.client.CreateSignedUrl(getObjectInput)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("failed to create signed download URL: %w", err)
 	}
 	v, err := url.Parse(getObjectOutput.SignedUrl)
-	if err == nil {
-		v.Host = s.cdnDomain
-		v.Scheme = "https"
-	} else {
-		logrus.Infof("%s cannot be parsed", getObjectOutput.SignedUrl)
-		panic(err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse signed URL: %w", err)
 	}
-	return v
+	v.Host = s.cdnDomain
+	v.Scheme = "https"
+	return v, nil
+}
+
+//go:noinline
+func (s *server) generateUploadUrl(putObjectInput *obs.CreateSignedUrlInput) (*obs.CreateSignedUrlOutput, error) {
+	return s.client.CreateSignedUrl(putObjectInput)
 }
 
 func (s *server) healthCheck(w http.ResponseWriter, r *http.Request) {
-	response := batch.SuccessResponse{
-		Message: "Success",
-		Data:    "healthCheck success",
+	w.Header().Set(contentType, jsonHeader)
+
+	dbOK := true
+	if db.Db != nil {
+		sqlDB, err := db.Db.DB()
+		if err != nil || sqlDB.Ping() != nil {
+			dbOK = false
+		}
+	} else {
+		dbOK = false
 	}
 
-	w.Header().Set(contentType, jsonHeader)
+	obsOK := true
+	if ObsClient != nil && Bucket != "" {
+		input := &obs.GetBucketMetadataInput{Bucket: Bucket}
+		_, err := ObsClient.GetBucketMetadata(input)
+		if err != nil {
+			logrus.Debugf("health check OBS GetBucketMetadata failed: %v", err)
+			obsOK = false
+		}
+	} else {
+		obsOK = false
+	}
+
+	if !dbOK || !obsOK {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		must(json.NewEncoder(w).Encode(batch.SuccessResponse{
+			Message: "Unhealthy",
+			Data:    fmt.Sprintf("db=%v obs=%v", dbOK, obsOK),
+		}))
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
-	must(json.NewEncoder(w).Encode(response))
+	must(json.NewEncoder(w).Encode(batch.SuccessResponse{
+		Message: "Success",
+		Data:    "healthCheck success",
+	}))
 }
 
 // --
 
 func must(err error) {
 	if err != nil {
-		panic(err)
+		logrus.Errorf("encode response failed: %v", err)
 	}
 }
 
@@ -454,14 +497,20 @@ func (s *server) download(w http.ResponseWriter, r *http.Request) {
 		Headers: map[string]string{contentType: obsHeader},
 	}
 
-	v := s.generateDownloadUrl(getObjectInput)
+	v, err := s.generateDownloadUrl(getObjectInput)
+	if err != nil {
+		w.Header().Set(contentType, jsonHeader)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
 
 	w.Header().Set(contentType, jsonHeader)
 
 	response := map[string]string{"url": v.String()}
 
 	w.WriteHeader(http.StatusOK)
-	err := json.NewEncoder(w).Encode(response)
+	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
 		return
 	}
@@ -623,7 +672,19 @@ func checkOidFileName() {
 
 }
 
+const maxRepoOidNameDepth = 10
+
+//go:noinline
 func checkRepoOidName(userInRepo auth.UserInRepo) (oidFileNameMap map[string]auth.FileInfo) {
+	return checkRepoOidNameWithDepth(userInRepo, 0)
+}
+
+//go:noinline
+func checkRepoOidNameWithDepth(userInRepo auth.UserInRepo, depth int) (oidFileNameMap map[string]auth.FileInfo) {
+	if depth >= maxRepoOidNameDepth {
+		logrus.Errorf("checkRepoOidName exceeded max depth %d for owner:%v repo:%v", maxRepoOidNameDepth, userInRepo.Owner, userInRepo.Repo)
+		return nil
+	}
 	oidFileNameMap, err := auth.GetLFSMapping(userInRepo)
 	if err != nil {
 		logrus.Errorf("get lfs mapping failed: %v", err)
@@ -638,7 +699,7 @@ func checkRepoOidName(userInRepo auth.UserInRepo) (oidFileNameMap map[string]aut
 		if repo.Parent.Fullname != "" {
 			userInRepo.Owner = strings.Split(repo.Parent.Fullname, "/")[0]
 			userInRepo.Repo = strings.Split(repo.Parent.Fullname, "/")[1]
-			return checkRepoOidName(userInRepo)
+			return checkRepoOidNameWithDepth(userInRepo, depth+1)
 		}
 	}
 	return oidFileNameMap

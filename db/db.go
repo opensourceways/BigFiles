@@ -28,13 +28,12 @@ func Init(cfg config.DBConfig) error {
 		},
 	)
 	if err != nil {
-		log.Fatal("Failed to connect to database", err)
-		return err
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	sqlDb, err := dbInstance.DB()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
 	}
 
 	sqlDb.SetConnMaxLifetime(cfg.GetLifeDuration())
@@ -44,6 +43,11 @@ func Init(cfg config.DBConfig) error {
 	Db = dbInstance
 
 	return nil
+}
+
+// RunMigration performs schema auto-migration once at startup.
+func RunMigration() error {
+	return Db.AutoMigrate(&LfsObj{})
 }
 
 // DB returns the current database instance.
@@ -67,11 +71,6 @@ type LfsObj struct {
 
 // InsertLFSObj 插入 LFS 元数据
 func InsertLFSObj(obj LfsObj) error {
-	err := Db.AutoMigrate(&LfsObj{})
-	if err != nil {
-		return err
-	}
-
 	var existingObj LfsObj
 	if err := Db.Where("oid = ? AND repo = ? AND owner = ?", obj.Oid,
 		obj.Repo, obj.Owner).First(&existingObj).Error; err == nil {

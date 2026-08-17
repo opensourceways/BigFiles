@@ -88,13 +88,14 @@ func checkExist(lfsObjs []db.LfsObj) {
 	}
 }
 
+//go:noinline
 func check(oid string) (bool, error) {
 	getObjectMetadataInput := obs.GetObjectMetadataInput{
 		Bucket: Bucket,
 		Key:    Prefit + oid,
 	}
 
-	_, err := ObsClient.GetObjectMetadata(&getObjectMetadataInput)
+	_, err := getObsObjectMetadata(&getObjectMetadataInput)
 	if err != nil {
 		var obsError obs.ObsError
 		if errors.As(err, &obsError) {
@@ -102,9 +103,13 @@ func check(oid string) (bool, error) {
 				return false, nil
 			}
 		}
-		// 其他错误
 		return true, err
 	}
 
 	return true, nil
+}
+
+//go:noinline
+func getObsObjectMetadata(input *obs.GetObjectMetadataInput) (*obs.GetObjectMetadataOutput, error) {
+	return ObsClient.GetObjectMetadata(input)
 }

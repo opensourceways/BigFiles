@@ -674,10 +674,12 @@ func checkOidFileName() {
 
 const maxRepoOidNameDepth = 10
 
+//go:noinline
 func checkRepoOidName(userInRepo auth.UserInRepo) (oidFileNameMap map[string]auth.FileInfo) {
 	return checkRepoOidNameWithDepth(userInRepo, 0)
 }
 
+//go:noinline
 func checkRepoOidNameWithDepth(userInRepo auth.UserInRepo, depth int) (oidFileNameMap map[string]auth.FileInfo) {
 	if depth >= maxRepoOidNameDepth {
 		logrus.Errorf("checkRepoOidName exceeded max depth %d for owner:%v repo:%v", maxRepoOidNameDepth, userInRepo.Owner, userInRepo.Repo)

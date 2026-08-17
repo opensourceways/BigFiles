@@ -90,6 +90,30 @@ func initObsClient(cfg *config.Config) error {
 	return nil
 }
 
+func reapZombies(sigChld <-chan os.Signal) {
+	for range sigChld {
+		for {
+			pid, _ := syscall.Wait4(-1, nil, syscall.WNOHANG, nil)
+			if pid <= 0 {
+				break
+			}
+		}
+	}
+}
+
+func setupGracefulShutdown(srv *http.Server) <-chan os.Signal {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		<-quit
+		log.Println("shutting down server...")
+		if err := srv.Shutdown(nil); err != nil {
+			logrus.Errorf("server shutdown error: %v", err)
+		}
+	}()
+	return quit
+}
+
 func main() {
 	o, err := gatherOptions(
 		flag.NewFlagSet(os.Args[0], flag.ExitOnError),
@@ -113,17 +137,7 @@ func main() {
 	// table, causing PIDPressure evictions.
 	sigChld := make(chan os.Signal, 1)
 	signal.Notify(sigChld, syscall.SIGCHLD)
-	go func() {
-		for range sigChld {
-			for {
-				// WNOHANG = 1: non-blocking wait — returns immediately if no child has exited.
-				pid, _ := syscall.Wait4(-1, nil, syscall.WNOHANG, nil)
-				if pid <= 0 {
-					break
-				}
-			}
-		}
-	}()
+	go reapZombies(sigChld)
 
 	//cfg
 	cfg := new(config.Config)
@@ -172,15 +186,7 @@ func main() {
 	}
 
 	// Graceful shutdown: listen for SIGTERM/SIGINT and call srv.Shutdown()
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		<-quit
-		log.Println("shutting down server...")
-		if err := srv.Shutdown(nil); err != nil {
-			logrus.Errorf("server shutdown error: %v", err)
-		}
-	}()
+	setupGracefulShutdown(srv)
 
 	log.Println("serving on http://0.0.0.0:5000 ...")
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

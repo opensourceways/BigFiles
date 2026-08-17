@@ -468,3 +468,46 @@ func TestExtractLFSFileInfo_InvalidSize(t *testing.T) {
 	assert.True(t, skip)
 	assert.Equal(t, 0, fileInfo.Size, "invalid size should default to 0")
 }
+
+func TestHandleGiteeWebhook_ProcessMergeError(t *testing.T) {
+	origKey := Webhook_key
+	Webhook_key = "secret"
+	defer func() { Webhook_key = origKey }()
+
+	s := &server{}
+	body := `{"hook_name":"merge_request_hooks","pull_request":{"merged":true,"id":1,"diff_url":"https://github.com/test/repo/diff","base":{"repo":{"full_name":"owner/repo"}}}}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook/merge", strings.NewReader(body))
+	req.Header.Set("X-Gitee-Token", "secret")
+	w := httptest.NewRecorder()
+
+	s.handleGiteeWebhook(w, req)
+	assert.Equal(t, http.StatusInternalServerError, w.Code, "non-gitee diff URL should fail")
+}
+
+func TestWriteJSONResponse_EncodeError(t *testing.T) {
+	w := httptest.NewRecorder()
+	writeJSONResponse(w, http.StatusOK, func() {})
+	assert.Equal(t, http.StatusOK, w.Code, "status already written before encode attempt")
+}
+
+func TestProcessMergeRequest_ExtractError(t *testing.T) {
+	s := &server{}
+	payload := &GiteeWebhookPayload{}
+	payload.PullRequest.DiffURL = "http://bad-scheme.com/diff"
+	payload.PullRequest.Base.Repo.FullName = "owner/repo"
+
+	_, err := s.processMergeRequest(payload)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTPS")
+}
+
+func TestProcessMergeRequest_EmptyDiffURL(t *testing.T) {
+	s := &server{}
+	payload := &GiteeWebhookPayload{}
+	payload.PullRequest.DiffURL = ""
+	payload.PullRequest.Base.Repo.FullName = "owner/repo"
+
+	_, err := s.processMergeRequest(payload)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTPS")
+}

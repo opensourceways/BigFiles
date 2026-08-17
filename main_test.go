@@ -3,8 +3,11 @@ package main
 import (
 	"errors"
 	"flag"
+	"net/http"
+	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"bou.ke/monkey"
 	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
@@ -188,4 +191,25 @@ func TestGatherOptions_RmCfg(t *testing.T) {
 	o, err := gatherOptions(fs, "--rm-cfg")
 	assert.NoError(t, err)
 	assert.True(t, o.service.RemoveCfg)
+}
+
+func TestReapZombies_ExitsOnChannelClose(t *testing.T) {
+	sigChld := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	go func() {
+		reapZombies(sigChld)
+		close(done)
+	}()
+	close(sigChld)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reapZombies did not exit on channel close")
+	}
+}
+
+func TestSetupGracefulShutdown(t *testing.T) {
+	srv := &http.Server{}
+	quit := setupGracefulShutdown(srv)
+	assert.NotNil(t, quit, "should return the quit channel")
 }

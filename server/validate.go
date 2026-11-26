@@ -16,6 +16,7 @@ type validateConfig struct {
 var validatecfg validateConfig
 var Webhook_key string
 var gitCodeSwitch bool
+var githubModel bool
 var giteeDefaultToken string
 var atomGiteDefaultToken string
 
@@ -24,6 +25,7 @@ func Init(cfg *config.Config) error {
 	gitCodeSwitch = cfg.GitCodeSwitch
 	giteeDefaultToken = cfg.DefaultToken
 	atomGiteDefaultToken = cfg.DefaultGitCodeToken
+	githubModel = cfg.GithubModel
 	var err error
 	Webhook_key = validateConfig.WebhookKey
 

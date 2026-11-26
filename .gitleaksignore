@@ -1,0 +1,14 @@
+# gitleaks 忽略列表：格式 `<commit-sha>:<file>:<rule-id>:<line>`
+#
+# 以下 5 条 fingerprint 均指向 commit 44db7ce 之前的历史文件，是文档 / 演示脚本中
+# 展示"错误做法"的示例字符串（形如 sk-1234567890abcdef），不是真实凭证。
+# 已在最新 commit 中替换为低熵占位符（sk-YOUR_API_KEY_HERE），但 gitleaks 扫描
+# 整个 git 历史，历史 commit 的 diff 仍会命中，故需在此忽略。
+#
+# 详见 .ai/lessons-learned.md LL-006、.ai/anti-patterns.md AP-004
+
+44db7ceff586ddee048e7751ee7d41d46ec0e88a:.ai/skills/local-ci-go/scripts/run_gitleaks.sh:generic-api-key:129
+44db7ceff586ddee048e7751ee7d41d46ec0e88a:.ai/skills/local-ci-go/references/security-best-practices.md:generic-api-key:13
+44db7ceff586ddee048e7751ee7d41d46ec0e88a:.ai/skills/local-ci-go/references/security-best-practices.md:generic-api-key:221
+44db7ceff586ddee048e7751ee7d41d46ec0e88a:.ai/skills/local-ci-go/scripts/run_gitleaks.ps1:generic-api-key:133
+44db7ceff586ddee048e7751ee7d41d46ec0e88a:.ai/skills/local-ci-go/scripts/run_gitleaks.ps1:generic-api-key:140

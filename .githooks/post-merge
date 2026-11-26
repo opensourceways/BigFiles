@@ -1,0 +1,99 @@
+#!/bin/bash
+
+# Post-merge Hook（通用模板）
+# 合并后自动同步 Skills 索引
+# 由 ai-standardization-kit/git-hooks-infrastructure/install-hooks.sh 安装
+
+echo "🔄 Running post-merge tasks..."
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# ============================================================================
+# Skill 索引同步
+# ============================================================================
+
+echo ""
+echo "=== Skill 同步 ==="
+
+# 检查是否有 Skill 文件在合并中被修改
+if git diff --name-only HEAD@{1}..HEAD 2>/dev/null | grep -q "\.ai/skills/"; then
+    echo "📋 检测到 Skill 变更，正在同步..."
+
+    if command -v node &> /dev/null; then
+        # 同步 Skill 配置（如果脚本存在）
+        if [ -f ".ai/scripts/skill-sync.js" ]; then
+            if node .ai/scripts/skill-sync.js > /dev/null 2>&1; then
+                echo -e "${GREEN}✓${NC} Skill 已同步到所有工具配置"
+            else
+                echo -e "${YELLOW}⚠${NC}  Skill 同步遇到问题，请手动检查"
+            fi
+        fi
+
+        # 更新 AGENTS.md 索引（如果脚本存在）
+        if [ -f ".ai/scripts/skill-index-update.js" ]; then
+            if node .ai/scripts/skill-index-update.js > /dev/null 2>&1; then
+                echo -e "${GREEN}✓${NC} AGENTS.md 索引已更新"
+            else
+                echo -e "${YELLOW}⚠${NC}  AGENTS.md 索引更新遇到问题"
+            fi
+        fi
+
+        if [ ! -f ".ai/scripts/skill-sync.js" ] && [ ! -f ".ai/scripts/skill-index-update.js" ]; then
+            echo -e "${YELLOW}ℹ${NC}  自动同步脚本未安装，请手动更新 .ai/skills/index.json 和 AGENTS.md"
+        fi
+    else
+        echo -e "${YELLOW}⚠${NC}  Node.js 未安装，跳过 Skill 自动同步"
+        echo "    请手动检查 .ai/skills/index.json 是否需要更新"
+    fi
+else
+    echo -e "${GREEN}✓${NC} 无 Skill 变更，跳过同步"
+fi
+
+# ============================================================================
+# 依赖变更提示
+# ============================================================================
+
+echo ""
+echo "=== 依赖检查 ==="
+
+BUILD_TOOL=""
+if [ -f "pom.xml" ]; then
+    BUILD_TOOL="maven"
+elif [ -f "package.json" ]; then
+    BUILD_TOOL="npm"
+elif [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+    BUILD_TOOL="gradle"
+fi
+
+if [ -n "$BUILD_TOOL" ]; then
+    case $BUILD_TOOL in
+        maven)
+            DEPS_CHANGED=$(git diff --name-only HEAD@{1}..HEAD 2>/dev/null | grep "pom.xml" | wc -l)
+            ;;
+        npm)
+            DEPS_CHANGED=$(git diff --name-only HEAD@{1}..HEAD 2>/dev/null | grep "package.json" | wc -l)
+            ;;
+        gradle)
+            DEPS_CHANGED=$(git diff --name-only HEAD@{1}..HEAD 2>/dev/null | grep -E "build.gradle" | wc -l)
+            ;;
+    esac
+
+    if [ "$DEPS_CHANGED" -gt 0 ]; then
+        echo -e "${YELLOW}⚠${NC}  依赖配置文件已变更，建议重新安装依赖："
+        case $BUILD_TOOL in
+            maven)  echo "    mvn clean install -DskipTests" ;;
+            npm)    echo "    npm install" ;;
+            gradle) echo "    ./gradlew build -x test" ;;
+        esac
+    else
+        echo -e "${GREEN}✓${NC} 无依赖变更"
+    fi
+fi
+
+echo ""
+echo -e "${GREEN}✅ 合并后任务完成${NC}"
+exit 0

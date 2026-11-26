@@ -1,54 +1,67 @@
 package auth
 
 import (
-	"fmt"
-	"github.com/stretchr/testify/assert"
-	"io"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_getParsedResponse(t *testing.T) {
-	type args struct {
-		method string
-		path   string
-		header http.Header
-		body   io.Reader
-		obj    interface{}
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr assert.ErrorAssertionFunc
-	}{
-		{
-			name: "Test GET request with correct repo and owner",
-			args: args{
-				method: "GET",
-				path:   "https://gitee.com/api/v5/repos/src-openeuler/software-package-server",
-				header: http.Header{contentType: []string{"application/json;charset=UTF-8"}},
-				body:   nil,
-				obj:    nil,
-			},
-			wantErr: assert.NoError,
-		},
-		{
-			name: "Test GET request with wrong repo and owner",
-			args: args{
-				method: "GET",
-				path:   "https://gitee.com/api/v5/repos/owner/repo",
-				header: http.Header{contentType: []string{"application/json;charset=UTF-8"}},
-				body:   nil,
-				obj:    nil,
-			},
-			wantErr: assert.Error,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.wantErr(t,
-				getParsedResponse(tt.args.method, tt.args.path, tt.args.header, tt.args.body, tt.args.obj),
-				fmt.Sprintf("getParsedResponse test, name:%v", tt.name))
-		})
-	}
+	t.Run("200 response parses JSON into obj", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "GET", r.Method)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"full_name": "org/repo"})
+		}))
+		defer server.Close()
+
+		var result map[string]string
+		err := getParsedResponse("GET", server.URL, http.Header{}, nil, &result)
+		assert.NoError(t, err)
+		assert.Equal(t, "org/repo", result["full_name"])
+	})
+
+	t.Run("404 returns not_found error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		err := getParsedResponse("GET", server.URL, http.Header{}, nil, nil)
+		assert.EqualError(t, err, "not_found")
+	})
+
+	t.Run("401 returns unauthorized error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		}))
+		defer server.Close()
+
+		err := getParsedResponse("GET", server.URL, http.Header{}, nil, nil)
+		assert.EqualError(t, err, "unauthorized")
+	})
+
+	t.Run("403 returns forbidden error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+
+		err := getParsedResponse("GET", server.URL, http.Header{}, nil, nil)
+		assert.EqualError(t, err, "forbidden")
+	})
+
+	t.Run("500 returns system_error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		err := getParsedResponse("GET", server.URL, http.Header{}, nil, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "system_error")
+	})
 }

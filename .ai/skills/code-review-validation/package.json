@@ -1,0 +1,18 @@
+{
+  "name": "code-review-validation",
+  "version": "1.0.0",
+  "description": "触发独立 Reviewer Agent 对 coding agent 产出进行四维度对抗验证",
+  "main": "skill.md",
+  "categories": ["governance", "quality-assurance"],
+  "modes": ["orchestrator", "code"],
+  "priority": 8,
+  "auto_load": false,
+  "triggers": ["pre-commit", "verification-complete"],
+  "dependencies": {
+    "skills": ["workflow-enforcer"],
+    "files": [".ai/agents/roles/code-reviewer.md"]
+  },
+  "outputs": {
+    "report": ".ai/reviews/review-{type}-{YYYYMMDD}.md"
+  }
+}

@@ -1,0 +1,182 @@
+{
+  "version": "3.0.0",
+  "schemaVersion": "3.0.0",
+  "name": "BigFiles AI Skills Index",
+  "description": "BigFiles 项目的 AI 技能索引文件，用于 Agent 自动发现和加载技能，支持 v3.0.0 标准格式",
+  "created": "2026-03-23",
+  "updated": "2026-03-23",
+  "formatVersion": "standard",
+  "skills": [
+    {
+      "id": "project-init",
+      "name": "project-init",
+      "description": "项目初始化配置加载器，自动加载所有项目配置文件",
+      "version": "1.0.0",
+      "path": "./project-init",
+      "categories": ["initialization", "governance"],
+      "modes": ["code", "architect", "ask"],
+      "priority": 100,
+      "enabled": true,
+      "dependencies": {
+        "skills": []
+      },
+      "tools": {}
+    },
+    {
+      "id": "task-prompt-generator",
+      "name": "task-prompt-generator",
+      "description": "帮助用户生成标准化的任务提示词，定义任务工作流和步骤，确保提供给 Agent 的提示词一致且符合项目标准",
+      "version": "1.0.0",
+      "path": "./task-prompt-generator",
+      "categories": ["documentation", "development"],
+      "modes": ["orchestrator", "code", "architect"],
+      "priority": 5,
+      "enabled": true,
+      "dependencies": {
+        "skills": []
+      },
+      "tools": {}
+    },
+    {
+      "id": "workflow-enforcer",
+      "name": "workflow-enforcer",
+      "description": "强制执行项目的开发工作流程规范，确保所有使用 Agent 进行开发的人员遵循标准化流程",
+      "version": "1.0.0",
+      "path": "./workflow-enforcer",
+      "categories": ["governance", "quality-assurance"],
+      "modes": ["orchestrator", "code"],
+      "priority": 10,
+      "enabled": true,
+      "dependencies": {
+        "skills": ["task-prompt-generator", "bigfiles-code-style"]
+      },
+      "tools": {}
+    },
+    {
+      "id": "code-review-validation",
+      "name": "code-review-validation",
+      "description": "触发独立 Reviewer Agent（角色R）对 coding agent 产出进行五维度对抗验证（语义对齐、测试真实性、边界覆盖、架构合规、反模式合规）",
+      "version": "1.1.0",
+      "path": "./code-review-validation",
+      "categories": ["governance", "quality-assurance"],
+      "modes": ["orchestrator", "code"],
+      "priority": 8,
+      "enabled": true,
+      "dependencies": {
+        "skills": ["workflow-enforcer"],
+        "files": [".ai/agents/roles/code-reviewer.md"]
+      },
+      "tools": {}
+    },
+    {
+      "id": "bigfiles-code-style",
+      "name": "bigfiles-code-style",
+      "description": "BigFiles 项目的代码风格和安全约束规范，基于 Go 语言特性定义编码标准、安全最佳实践和开发约束",
+      "version": "1.0.0",
+      "path": "./bigfiles-code-style",
+      "categories": ["governance", "quality-assurance"],
+      "modes": ["code", "orchestrator"],
+      "priority": 15,
+      "enabled": true,
+      "dependencies": {
+        "skills": ["workflow-enforcer"]
+      },
+      "tools": {}
+    }
+  ],
+  "categories": {
+    "initialization": {
+      "name": "初始化",
+      "description": "项目初始化、配置加载和环境设置",
+      "skillCount": 1,
+      "skills": ["project-init"],
+      "enabled": true
+    },
+    "development": {
+      "name": "开发",
+      "description": "功能开发、代码实现和集成",
+      "skillCount": 1,
+      "skills": ["task-prompt-generator"],
+      "enabled": true
+    },
+    "documentation": {
+      "name": "文档",
+      "description": "技术文档、API 文档和开发规范",
+      "skillCount": 1,
+      "skills": ["task-prompt-generator"],
+      "enabled": true
+    },
+    "governance": {
+      "name": "治理",
+      "description": "工作流程强制、质量保证和合规性检查",
+      "skillCount": 4,
+      "skills": ["project-init", "workflow-enforcer", "code-review-validation", "bigfiles-code-style"],
+      "enabled": true
+    },
+    "quality-assurance": {
+      "name": "质量保证",
+      "description": "代码质量、测试覆盖和流程合规检查",
+      "skillCount": 3,
+      "skills": ["workflow-enforcer", "code-review-validation", "bigfiles-code-style"],
+      "enabled": true
+    }
+  },
+  "modes": {
+    "architect": {
+      "name": "Architect 模式",
+      "description": "架构设计、文档生成和系统分析",
+      "skillCount": 2,
+      "skills": ["project-init", "task-prompt-generator"],
+      "enabled": true
+    },
+    "code": {
+      "name": "Code 模式",
+      "description": "代码开发、功能实现和测试编写",
+      "skillCount": 3,
+      "skills": ["project-init", "task-prompt-generator", "bigfiles-code-style"],
+      "enabled": true
+    },
+    "ask": {
+      "name": "Ask 模式",
+      "description": "问题解答、文档查询和技术咨询",
+      "skillCount": 1,
+      "skills": ["project-init"],
+      "enabled": true
+    },
+    "orchestrator": {
+      "name": "Orchestrator 模式",
+      "description": "任务协调、工作流管理和多模式协作",
+      "skillCount": 3,
+      "skills": ["task-prompt-generator", "workflow-enforcer", "code-review-validation"],
+      "enabled": true
+    }
+  },
+  "discovery": {
+    "autoScan": true,
+    "scanPaths": [".ai/skills"],
+    "scanInterval": 300,
+    "filePatterns": ["skill.md"],
+    "excludePatterns": ["index.json", "schema.json", "standard"],
+    "validation": {
+      "enabled": true,
+      "strict": false
+    },
+    "formatDetection": {
+      "enabled": true,
+      "skillPattern": "*/skill.md",
+      "packageJsonPattern": "*/package.json",
+      "preferredFormat": "vercel-skills"
+    }
+  },
+  "metadata": {
+    "validationEnabled": true,
+    "requiredFields": ["id", "name", "description", "version", "categories"],
+    "recommendedFields": ["namespace", "keywords", "tags", "dependencies", "modes", "priority"]
+  },
+  "statistics": {
+    "totalSkills": 5,
+    "enabledSkills": 5,
+    "disabledSkills": 0,
+    "lastUpdated": "2026-03-23"
+  }
+}

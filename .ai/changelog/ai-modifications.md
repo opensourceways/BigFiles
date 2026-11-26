@@ -26,6 +26,19 @@
 
 <!-- 以下为实际记录，按时间倒序排列 -->
 
+### 2026-11-26 fix：修复 Dockerfile 构建失败（Go 版本不匹配 + 废弃命令）
+
+- **模式**: fix
+- **修改意图**: 容器部署时 Docker 构建报错 `go: go.mod requires go >= 1.26.0 (running go 1.24.13)`。Dockerfile 使用 `golang:1.24` 镜像不满足 go.mod 的 `go 1.26.0` 要求。同时 `go get` 命令已废弃，且引用了未使用的 `algnhsa` 依赖
+- **归档提示词**: `.ai/prompts/prompt-fix-20261126.md`
+- **核心改动**:
+  - `DockerFile`: `golang:1.24` → `golang:1.26`，满足 go.mod 版本要求
+  - `DockerFile`: 移除废弃的 `go get github.com/akrylysov/algnhsa`（代码中未使用）和 `go get github.com/sirupsen/logrus`（已在 go.mod 中）
+  - `DockerFile`: `go build ./main.go` → `go mod download && go build -o main .`
+- **自验证**: chi v4.1.2 路由测试通过（验证不是路由冲突导致的 404）；Dockerfile 变更仅涉及构建阶段，不影响运行时逻辑
+
+---
+
 ### 2026-08-12 test：为 scripts/lfsNameQuery.py 补充 pytest 测试，生成 coverage.xml 供外部 SAST CI 消费
 
 - **模式**: test

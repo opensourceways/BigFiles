@@ -26,6 +26,20 @@
 
 <!-- 以下为实际记录，按时间倒序排列 -->
 
+### 2026-11-26 fix：升级 Go toolchain 至 1.26.11 修复 Trivy CVE 门禁
+
+- **模式**: fix
+- **修改意图**: PR 门禁 Trivy 扫描报告 23 个 stdlib CVE（当前版本 1.26.5），需升级到 1.26.11 覆盖所有修复版本
+- **归档提示词**: `.ai/prompts/prompt-fix-20261126.md`
+- **核心改动**:
+  - `go.mod`: toolchain go1.26.5 → go1.26.11
+  - `DockerFile`: golang:1.26 → golang:1.26.11
+  - `.github/workflows/workflow-validation.yml`: 3 处 go-version 1.26.5 → 1.26.11 + 注释
+  - `CLAUDE.md`: Go 1.26.0 → 1.26.11, toolchain 1.26.5 → 1.26.11
+- **自验证**: 全量 `go test ./...` 通过（auth / config / server / utils）
+
+---
+
 ### 2026-11-26 fix：修复 Dockerfile 构建失败（Go 版本不匹配 + 废弃命令）
 
 - **模式**: fix

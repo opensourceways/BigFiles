@@ -1,4 +1,4 @@
-FROM golang:1.26 as BUILDER
+FROM golang:1.26.11 as BUILDER
 
 WORKDIR /home
 COPY . .
